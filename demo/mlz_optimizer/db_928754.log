@@ -1,0 +1,60 @@
+Started at 2025-05-28 13:03:36-04:00.
+Host: d-6-1-2
+Main Job ID: 
+Job ID: 928754
+Redis URL: redis://default:8blSAXk6KRZ089m7@d-6-1-2:6379
+Server starting...
+475992:C 28 May 2025 13:03:37.154 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+475992:C 28 May 2025 13:03:37.154 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+475992:C 28 May 2025 13:03:37.154 * Redis version=7.4.2, bits=64, commit=00000000, modified=1, pid=475992, just started
+475992:C 28 May 2025 13:03:37.154 * Configuration loaded
+475992:M 28 May 2025 13:03:37.155 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+475992:M 28 May 2025 13:03:37.155 * monotonic clock: POSIX clock_gettime
+475992:M 28 May 2025 13:03:37.159 * Running mode=standalone, port=6379.
+475992:M 28 May 2025 13:03:37.159 * Server initialized
+475992:M 28 May 2025 13:03:37.234 * Loading RDB produced by version 7.4.2
+475992:M 28 May 2025 13:03:37.234 * RDB age 1953410 seconds
+475992:M 28 May 2025 13:03:37.234 * RDB memory usage when created 2.98 Mb
+475992:M 28 May 2025 13:03:37.355 * Done loading RDB, keys loaded: 5850, keys expired: 0.
+475992:M 28 May 2025 13:03:37.356 * DB loaded from disk: 0.196 seconds
+475992:M 28 May 2025 13:03:37.356 * Ready to accept connections tcp
+475992:M 28 May 2025 13:22:54.597 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:22:54.621 * Background saving started by pid 476383
+476383:C 28 May 2025 13:22:54.716 * DB saved on disk
+476383:C 28 May 2025 13:22:54.717 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:22:54.723 * Background saving terminated with success
+475992:M 28 May 2025 13:27:55.045 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:27:55.046 * Background saving started by pid 476479
+476479:C 28 May 2025 13:27:55.139 * DB saved on disk
+476479:C 28 May 2025 13:27:55.139 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:27:55.147 * Background saving terminated with success
+475992:M 28 May 2025 13:32:56.067 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:32:56.067 * Background saving started by pid 476576
+476576:C 28 May 2025 13:32:56.184 * DB saved on disk
+476576:C 28 May 2025 13:32:56.184 * Fork CoW for RDB: current 2 MB, peak 2 MB, average 1 MB
+475992:M 28 May 2025 13:32:56.271 * Background saving terminated with success
+475992:M 28 May 2025 13:37:57.090 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:37:57.091 * Background saving started by pid 476679
+476679:C 28 May 2025 13:37:57.146 * DB saved on disk
+476679:C 28 May 2025 13:37:57.146 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:37:57.192 * Background saving terminated with success
+475992:M 28 May 2025 13:42:58.013 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:42:58.014 * Background saving started by pid 476774
+476774:C 28 May 2025 13:42:58.067 * DB saved on disk
+476774:C 28 May 2025 13:42:58.067 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:42:58.115 * Background saving terminated with success
+475992:M 28 May 2025 13:47:59.035 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:47:59.037 * Background saving started by pid 476870
+476870:C 28 May 2025 13:47:59.086 * DB saved on disk
+476870:C 28 May 2025 13:47:59.087 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:47:59.139 * Background saving terminated with success
+475992:M 28 May 2025 13:53:00.080 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:53:00.081 * Background saving started by pid 476962
+476962:C 28 May 2025 13:53:00.157 * DB saved on disk
+476962:C 28 May 2025 13:53:00.157 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:53:00.183 * Background saving terminated with success
+475992:M 28 May 2025 13:58:01.051 * 100 changes in 300 seconds. Saving...
+475992:M 28 May 2025 13:58:01.052 * Background saving started by pid 477058
+477058:C 28 May 2025 13:58:01.122 * DB saved on disk
+477058:C 28 May 2025 13:58:01.122 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+475992:M 28 May 2025 13:58:01.153 * Background saving terminated with success

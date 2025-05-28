@@ -30,6 +30,9 @@ from ptyrad.utils import (
 )
 from ptyrad.visualization import plot_pos_grouping, plot_summary
 
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalRedisBackend
+
 
 class PtyRADSolver(object):
     """
@@ -150,7 +153,13 @@ class PtyRADSolver(object):
         n_trials         = hypertune_params.get('n_trials')
         timeout          = hypertune_params.get('timeout')
         study_name       = hypertune_params.get('study_name')
+        
+        ## redis
         storage_path     = hypertune_params.get('storage_path')
+        storage_path = JournalStorage(
+            JournalRedisBackend(storage_path, use_cluster=False)
+        )
+        
         sampler_params   = hypertune_params['sampler_params']
         pruner_params    = hypertune_params['pruner_params']
         error_metric     = hypertune_params['error_metric']
