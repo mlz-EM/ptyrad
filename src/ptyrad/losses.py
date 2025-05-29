@@ -176,7 +176,7 @@ def get_objp_contrast(model, indices):
     return -contrast  # Negative for minimization
 
 
-def get_loss_with_ground(model, indices,):
+def get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle):
     """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
     with torch.no_grad():
         probe = model.get_complex_probe_view()
@@ -192,7 +192,7 @@ def get_loss_with_ground(model, indices,):
         
         object_sampling = model.dx
         
-        _, _, error= align_object_to_ground_truth(object_mean.cpu().detach().numpy(), float(object_sampling.cpu().item()))
+        obj_n, tgt_n, error= align_object_to_ground_truth(object_mean.cpu().detach().numpy(), float(object_sampling.cpu().item()), ground_truth, ground_truth_sampling, rotation_angle)
 
-    return error
+    return error, obj_n, tgt_n
 

@@ -4,17 +4,24 @@ from scipy.optimize import least_squares
 from skimage.registration import phase_cross_correlation
 import matplotlib.pyplot as plt
 import tifffile
+from ptyrad.utils import safe_filename
 
 ## -40 deg rotation means object rotate 40 deg clock wise will match the ground truth
 
-def plot_alignment(aligned: np.ndarray, ground: np.ndarray, outpath='aligned.png'):
-    fig, axes = plt.subplots(1,1,figsize=(4,4))
-    axes.imshow(ground, cmap='gray')
-    axes.imshow(aligned, cmap='inferno', alpha=0.3)
-    axes.axis('off')
+def plot_alignment(error, output_path, niter, collate_str='',):
+    err, aligned, ground = error
+    iter_str = '_iter' + str(niter).zfill(4)
+    fig, axes = plt.subplots(1,2,figsize=(8,4))
+    axes[0].set_title(f'RMSE: {err}')
+    axes[0].imshow(ground, cmap='gray')
+    axes[0].imshow(aligned, cmap='inferno', alpha=0.7)
+    axes[0].axis('off')
+    axes[1].imshow(ground-aligned, cmap='RdBu')
+    axes[1].axis('off')
     plt.tight_layout()
-    plt.savefig(outpath)
+    plt.savefig(safe_filename(output_path + f"/diffGroundTruth{collate_str}{iter_str}.png"))
     plt.close(fig)
+
 
 def compose_affine(scale, rot_deg, dy, dx, center):
     theta = np.deg2rad(rot_deg)
@@ -45,12 +52,7 @@ def normalize_within_mask(img, mask):
 
 def align_object_to_ground_truth(
     object_mean, object_sampling,
-    ground_truth_path='ground_truth.tif', refinement_niter=1
-):
-    with tifffile.TiffFile(ground_truth_path) as f:
-        ground_truth = f.asarray().astype(float)
-        ground_truth_sampling = float(f.shaped_metadata[0]['spacing'])
-        rotation_angle = float(f.shaped_metadata[0]['rotation'])
+    ground_truth, ground_truth_sampling, rotation_angle, refinement_niter=5):
 
     H_out, W_out = ground_truth.shape
     H_in,  W_in  = object_mean.shape
@@ -107,7 +109,5 @@ def align_object_to_ground_truth(
     obj_n = normalize_within_mask(obj_final, mask)
     tgt_n = normalize_within_mask(ground_truth, mask)
     rmse  = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask])**2))
-
-    plot_alignment(obj_final, ground_truth, )
     
-    return obj_final, ground_truth, rmse
+    return obj_n, tgt_n, rmse

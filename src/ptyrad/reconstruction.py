@@ -33,6 +33,8 @@ from ptyrad.visualization import plot_pos_grouping, plot_summary
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalRedisBackend
 
+import tifffile
+from ptyrad.utils.image_proc_mlz import plot_alignment
 
 class PtyRADSolver(object):
     """
@@ -958,7 +960,21 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     collate_results   = hypertune_params['collate_results']
     append_params     = hypertune_params['append_params']
     error_metric      = hypertune_params['error_metric']
-    tune_params       = hypertune_params['tune_params']
+    
+    if error_metric == 'ground_truth':
+        error_params  = hypertune_params['error_params']
+        ERROR_ITERS   = error_params[0]
+        with tifffile.TiffFile(error_params[1]) as f:
+            ground_truth = f.asarray().astype(float)
+            ground_truth_sampling = float(f.shaped_metadata[0]['spacing'])
+        rotation_angle = error_params[2]
+    else:
+        ERROR_ITERS = 1
+        ground_truth = 0
+        ground_truth_sampling = 0
+        rotation_angle = 0
+    
+    tune_params       = hypertune_params['tune_params']   
     trial_id = 't' + str(trial.number).zfill(4)
     params['recon_params']['prefix'] += trial_id
     
@@ -1073,13 +1089,17 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             plot_summary(output_path, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
-        if hypertune_params['pruner_params'] is not None:
-            optuna_error = compute_optuna_error(model, indices, error_metric)
+        if hypertune_params['pruner_params'] is not None and niter % ERROR_ITERS == 0:
+            error = compute_optuna_error(model, indices, error_metric, ground_truth, ground_truth_sampling, rotation_angle)
+            if isinstance(error, (list, tuple)):
+                optuna_error = error[0]
+                plot_alignment(error, output_path, niter, collate_str='', )
+            else:
+                optuna_error = error
             trial.report(optuna_error, niter)
-            
+
             # Handle pruning based on the intermediate value.
-            if trial.should_prune():
-            
+            if trial.should_prune():      
                 # Save the current results of the pruned trials
                 params_str = parse_hypertune_params_to_str(trial.params) if append_params else ''
                 collate_str = f"_error_{optuna_error:.5f}_{trial_id}{params_str}"
@@ -1115,7 +1135,7 @@ def get_optuna_suggest(trial, suggest, name, kwargs):
         raise (f"Optuna trail.suggest method '{suggest}' is not supported.")
 
 
-def compute_optuna_error(model, indices, metric, ):
+def compute_optuna_error(model, indices, metric,  ground_truth, ground_truth_sampling, rotation_angle):
     """
     Helper function to compute the current error for Optuna
     """
@@ -1124,6 +1144,6 @@ def compute_optuna_error(model, indices, metric, ):
     elif metric == 'loss':
         return model.loss_iters[-1][-1]
     elif metric == 'ground_truth':
-        return get_loss_with_ground(model, indices)
+        return get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle)
     else:
         raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")
