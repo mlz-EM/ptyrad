@@ -7,7 +7,7 @@ import torch
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
-from ptyrad.utils import normalize_from_zero_to_one
+from ptyrad.utils import normalize_from_zero_to_one, align_object_to_ground_truth
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
@@ -153,7 +153,7 @@ class CombinedLoss(torch.nn.Module):
         losses.append(self.get_loss_simlar(object_patches, omode_occu))
         total_loss = sum(losses)
         return total_loss, losses
-    
+  
 # This constrast function is currently only used for Hypertune objective
 def get_objp_contrast(model, indices):
     """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
@@ -174,3 +174,25 @@ def get_objp_contrast(model, indices):
         contrast = torch.std(objp_crop) / (torch.mean(objp_crop) + 1e-8)  # Avoid division by zero
 
     return -contrast  # Negative for minimization
+
+
+def get_loss_with_ground(model, indices,):
+    """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
+    with torch.no_grad():
+        probe = model.get_complex_probe_view()
+        objp = model.opt_objp.detach().sum(1).squeeze() # Sum along z and squeeze the omode dimension
+        
+        # Get crop positions and compute bounds
+        crop_pos = model.crop_pos[indices].detach() + torch.tensor(probe.shape[-2:], device=model.crop_pos.device) // 2
+        y_min, y_max = crop_pos[:, 0].min().item(), crop_pos[:, 0].max().item()
+        x_min, x_max = crop_pos[:, 1].min().item(), crop_pos[:, 1].max().item()
+
+        # Crop object phase tensor
+        object_mean = objp[y_min-1:y_max, x_min-1:x_max]
+        
+        object_sampling = model.dx
+        
+        _, _, error= align_object_to_ground_truth(object_mean.cpu().detach().numpy(), float(object_sampling.cpu().item()))
+
+    return error
+

@@ -15,7 +15,7 @@ from torch.utils.data import Dataset
 
 from ptyrad.constraints import CombinedConstraint
 from ptyrad.initialization import Initializer
-from ptyrad.losses import CombinedLoss, get_objp_contrast
+from ptyrad.losses import CombinedLoss, get_objp_contrast, get_loss_with_ground
 from ptyrad.models import PtychoAD
 from ptyrad.save import copy_params_to_dir, make_output_folder, save_results
 from ptyrad.utils import (
@@ -181,7 +181,7 @@ class PtyRADSolver(object):
         vprint(" ")
         
         # Check error metric validity
-        valid_metrics = {"contrast", "loss"}
+        valid_metrics = {"contrast", "loss", "ground_truth"}
         if error_metric not in valid_metrics:
             raise ValueError(f"Invalid error metric: '{error_metric}'. Expected one of {valid_metrics}.")
         
@@ -1114,7 +1114,8 @@ def get_optuna_suggest(trial, suggest, name, kwargs):
     else:
         raise (f"Optuna trail.suggest method '{suggest}' is not supported.")
 
-def compute_optuna_error(model, indices, metric):
+
+def compute_optuna_error(model, indices, metric, ):
     """
     Helper function to compute the current error for Optuna
     """
@@ -1122,5 +1123,7 @@ def compute_optuna_error(model, indices, metric):
         return get_objp_contrast(model, indices)
     elif metric == 'loss':
         return model.loss_iters[-1][-1]
+    elif metric == 'ground_truth':
+        return get_loss_with_ground(model, indices)
     else:
         raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")

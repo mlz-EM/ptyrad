@@ -66,3 +66,6 @@ from .physics import (  # noqa: F401
     make_stem_probe,
     near_field_evolution,
 )
+
+
+from .image_proc_mlz import (align_object_to_ground_truth)
