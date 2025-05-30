@@ -417,7 +417,7 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
         output_path += f"_aff{affine_str}"
     
     if np.any(init_tilts):
-        tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel())
+        tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel()[:2])
         output_path += f"_tilt{tilts_str}"
     
     output_path += postfix
