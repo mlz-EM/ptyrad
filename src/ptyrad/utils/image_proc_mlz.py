@@ -84,7 +84,7 @@ def align_object_to_ground_truth(
 
     # Refinement
     x0 = np.array([1.0, 0.0, 0.0, 0.0])
-    max_t = 2.0 / ground_truth_sampling
+    max_t = 3.0 / ground_truth_sampling
     bounds = ([0.95, -5, -max_t, -max_t],
               [1.05,  5,  max_t,  max_t])
 

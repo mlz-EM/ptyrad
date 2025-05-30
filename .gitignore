@@ -15,3 +15,5 @@ docs/_build/
 docs/_autosummary/
 docs/.doctrees/
 docs/.ipynb_checkpoints/
+.DS_Store
+src/.DS_Store

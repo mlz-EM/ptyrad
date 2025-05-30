@@ -456,7 +456,7 @@ class Initializer:
         vprint(f"### Initializing obj tilts from = '{tilt_source}' ###", verbose=self.verbose)
         
         if tilt_source == 'custom':
-            obj_tilts = tilt_params # (1,2) or (N,2) array in unit of mrad
+            obj_tilts = np.load(tilt_params) # (1,2) or (N,2) array in unit of mrad
 
         elif tilt_source == 'PtyRAD':
             pt_path = tilt_params
