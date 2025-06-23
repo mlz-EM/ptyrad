@@ -176,11 +176,11 @@ def get_objp_contrast(model, indices):
     return -contrast  # Negative for minimization
 
 
-def get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle):
+def get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle, srange=None):
     """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
     with torch.no_grad():
         probe = model.get_complex_probe_view()
-        objp = model.opt_objp.detach().sum(1).squeeze() # Sum along z and squeeze the omode dimension
+        objp = model.opt_objp.detach().squeeze() # Sum along z and squeeze the omode dimension
         
         # Get crop positions and compute bounds
         crop_pos = model.crop_pos[indices].detach() + torch.tensor(probe.shape[-2:], device=model.crop_pos.device) // 2
@@ -188,11 +188,11 @@ def get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, ro
         x_min, x_max = crop_pos[:, 1].min().item(), crop_pos[:, 1].max().item()
 
         # Crop object phase tensor
-        object_mean = objp[y_min-1:y_max, x_min-1:x_max]
+        object = objp[..., y_min-1:y_max, x_min-1:x_max]
         
         object_sampling = model.dx
         
-        obj_n, tgt_n, error= align_object_to_ground_truth(object_mean.cpu().detach().numpy(), float(object_sampling.cpu().item()), ground_truth, ground_truth_sampling, rotation_angle)
+        obj_n, tgt_n, error= align_object_to_ground_truth(object.cpu().detach().numpy(), float(object_sampling.cpu().item()), ground_truth, ground_truth_sampling, rotation_angle, srange)
 
     return error, obj_n, tgt_n
 

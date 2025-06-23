@@ -51,12 +51,14 @@ def normalize_within_mask(img, mask):
 
 
 def align_object_to_ground_truth(
-    object_mean, object_sampling,
-    ground_truth, ground_truth_sampling, rotation_angle, refinement_niter=5):
+    object, object_sampling,
+    ground_truth, ground_truth_sampling, rotation_angle, refinement_niter=5, srange=None):
 
     H_out, W_out = ground_truth.shape
-    H_in,  W_in  = object_mean.shape
+    H_in,  W_in  = object.shape[-2:]
 
+    object_mean = np.sum(object, axis=0)
+    
     center_in  = np.array([H_in / 2, W_in / 2])
     center_out = np.array([H_out / 2, W_out / 2])
     scale1 = object_sampling / ground_truth_sampling
@@ -109,5 +111,28 @@ def align_object_to_ground_truth(
     obj_n = normalize_within_mask(obj_final, mask)
     tgt_n = normalize_within_mask(ground_truth, mask)
     rmse  = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask])**2))
-    
+
+
+    #from here
+    obj_final = warp_with_matrix(object_mean, Mtot, (H_out, W_out))
+    mask = warp_with_matrix(np.ones_like(object_mean), Mtot, (H_out, W_out)) > 0.5
+    obj_n = normalize_within_mask(obj_final, mask)
+    tgt_n = normalize_within_mask(ground_truth, mask)
+
+    if srange is None:
+        rmse = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask]) ** 2))    
+    else:
+        rmses = []
+        for i in range(srange[0], srange[1]),:
+            obj_i = object[i]
+            warped = warp_with_matrix(obj_i, Mtot, (H_out, W_out))
+            mask = warp_with_matrix(np.ones_like(obj_i), Mtot, (H_out, W_out)) > 0.5
+            if not mask.any():
+                continue
+            obj_n = normalize_within_mask(warped, mask)
+            tgt_n = normalize_within_mask(ground_truth, mask)
+            rmse_i = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask]) ** 2))
+            rmses.append(rmse_i)
+
+        rmse = np.mean(rmses) if rmses else float('inf')
     return obj_n, tgt_n, rmse

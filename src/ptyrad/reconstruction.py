@@ -968,11 +968,13 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             ground_truth = f.asarray().astype(float)
             ground_truth_sampling = float(f.shaped_metadata[0]['spacing'])
         rotation_angle = error_params[2]
+        srange = error_params[3]
     else:
         ERROR_ITERS = 1
         ground_truth = 0
         ground_truth_sampling = 0
         rotation_angle = 0
+        srange = None
     
     tune_params       = hypertune_params['tune_params']   
     trial_id = 't' + str(trial.number).zfill(4)
@@ -1090,7 +1092,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                
         ## Pruning logic for optuna
         if hypertune_params['pruner_params'] is not None and niter % ERROR_ITERS == 0:
-            error = compute_optuna_error(model, indices, error_metric, ground_truth, ground_truth_sampling, rotation_angle)
+            error = compute_optuna_error(model, indices, error_metric, ground_truth, ground_truth_sampling, rotation_angle, srange)
             if isinstance(error, (list, tuple)):
                 optuna_error = error[0]
                 plot_alignment(error, output_path, niter, collate_str='', )
@@ -1135,7 +1137,7 @@ def get_optuna_suggest(trial, suggest, name, kwargs):
         raise (f"Optuna trail.suggest method '{suggest}' is not supported.")
 
 
-def compute_optuna_error(model, indices, metric,  ground_truth, ground_truth_sampling, rotation_angle):
+def compute_optuna_error(model, indices, metric,  ground_truth, ground_truth_sampling, rotation_angle, srange=None):
     """
     Helper function to compute the current error for Optuna
     """
@@ -1144,6 +1146,6 @@ def compute_optuna_error(model, indices, metric,  ground_truth, ground_truth_sam
     elif metric == 'loss':
         return model.loss_iters[-1][-1]
     elif metric == 'ground_truth':
-        return get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle)
+        return get_loss_with_ground(model, indices, ground_truth, ground_truth_sampling, rotation_angle, srange)
     else:
         raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")
