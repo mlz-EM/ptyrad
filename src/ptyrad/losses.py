@@ -7,7 +7,7 @@ import torch
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
-from ptyrad.utils import normalize_from_zero_to_one, align_object_to_ground_truth
+from ptyrad.utils import normalize_from_zero_to_one, align_object_to_ground_truth, vprint
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
@@ -103,6 +103,98 @@ class CombinedLoss(torch.nn.Module):
             loss_sparse = torch.tensor(0, dtype=torch.float32, device=self.device)
         return loss_sparse
     
+    def get_loss_objL1(self, object_patches, omode_occu):
+        """ Computes the sparsity regularization loss on object phase patches. """
+        # added by MLZ to be able to implement both L1 and L2 
+        # object_patches (groups, omode, Nz, Ny, Nx)
+        amplitude = object_patches[..., 0]
+        phase = object_patches[..., 1]
+        real = amplitude * torch.cos(phase)
+        imag = amplitude * torch.sin(phase)
+        complex_tensor = torch.complex(real, imag)
+    
+        objL1_params = self.loss_params['loss_objL1']
+        if objL1_params['state']:
+            loss_objL1 = objL1_params['weight'] * (torch.mean((complex_tensor - 1.0).abs(), dim=(0,2,3,4)) * omode_occu).sum()
+        else:
+            loss_objL1 = torch.tensor(0, dtype=torch.float32, device=self.device)
+        return loss_objL1
+        
+    def get_loss_objL2(self, object_patches, omode_occu):
+        """ Computes the sparsity regularization loss on object phase patches. """
+        # added by MLZ to be able to implement both L1 and L2 
+        objL2_params = self.loss_params['loss_objL2']
+        if objL2_params['state']:
+            loss_objL2 = objL2_params['weight'] * (torch.mean(object_patches.abs().pow(2), dim=(0,2,3,4)).pow(1/2) * omode_occu).sum()
+        else:
+            loss_objL2 = torch.tensor(0, dtype=torch.float32, device=self.device)
+        return loss_objL2
+    
+
+    def get_loss_objL2(self, object_patches, omode_occu):
+        """ Computes the sparsity regularization loss on object phase patches. """
+        # added by MLZ to be able to implement both L1 and L2 
+        # object_patches (groups, omode, Nz, Ny, Nx)
+        amplitude = object_patches[..., 0]
+        phase = object_patches[..., 1]
+        real = amplitude * torch.cos(phase)
+        imag = amplitude * torch.sin(phase)
+        complex_tensor = torch.complex(real, imag)
+    
+        objL2_params = self.loss_params['loss_objL2']
+        if objL2_params['state']:
+            loss_objL2 = objL2_params['weight'] * (torch.mean((complex_tensor - 1.0).abs().pow(2), dim=(0,2,3,4)).pow(1/2) * omode_occu).sum()
+        else:
+            loss_objL2 = torch.tensor(0, dtype=torch.float32, device=self.device)
+        return loss_objL2
+
+    # added by MLZ and folowing phaser implementation, only worked for multilayer
+    # @ https://github.com/hexane360/phaser/blob/d0f9c2097f2edfb2f25a730534638bba9ea23d10/phaser/engines/common/regularizers.py#L341C7-L341C21
+
+    def get_loss_layersTikhonov(self, object_patches, omode_occu):
+        """
+        Tikhonov regularization on complex object across the Layer axis.
+        Input shape: (B, o_mode, Layer, X, Y, 2) -> [amplitude, phase]
+        """
+        params = self.loss_params['loss_layersTikhonov']
+        if not params['state']:
+            return torch.tensor(0.0, dtype=torch.float32, device=self.device)
+
+        amplitude = object_patches[..., 0]
+        phase = object_patches[..., 1]
+        real = amplitude * torch.cos(phase)
+        imag = amplitude * torch.sin(phase)
+        complex_obj = torch.complex(real, imag)  # shape: (B, o_mode, L, X, Y)
+
+        diff_layer = complex_obj[:, :, 1:] - complex_obj[:, :, :-1]  # (B, o, L-1, X, Y)
+        diff_sq = diff_layer.abs().pow(2)
+        loss = diff_sq.mean(dim=(0, 2, 3, 4))  # (o_mode,)
+        
+        return params['weight'] * (loss * omode_occu).sum()
+
+
+    def get_loss_spatialTikhonov(self, object_patches, omode_occu):
+        """
+        Tikhonov regularization on complex object across spatial (X, Y) axes.
+        Input shape: (B, o_mode, Layer, X, Y, 2) -> [amplitude, phase]
+        """
+        params = self.loss_params['loss_spatialTikhonov']
+        if not params['state']:
+            return torch.tensor(0.0, dtype=torch.float32, device=self.device)
+
+        amplitude = object_patches[..., 0]
+        phase = object_patches[..., 1]
+        real = amplitude * torch.cos(phase)
+        imag = amplitude * torch.sin(phase)
+        complex_obj = torch.complex(real, imag)  # shape: (B, o_mode, L, X, Y)
+
+        diff_x = complex_obj[..., :, 1:] - complex_obj[..., :, :-1]  # (B, o, L, X, Y-1)
+        diff_y = complex_obj[..., 1:, :] - complex_obj[..., :-1, :]  # (B, o, L, X-1, Y)
+        diff_sq = diff_x.abs().pow(2).mean(dim=(-2, -1)) + diff_y.abs().pow(2).mean(dim=(-2, -1))
+        loss = diff_sq.mean(dim=(0, 2))  # mean over B and Layer → shape: (o_mode,)
+        
+        return params['weight'] * (loss * omode_occu).sum()
+
     def get_loss_simlar(self, object_patches, omode_occu):
         """ Computes the similarity loss between different object modes. """
 
@@ -150,6 +242,10 @@ class CombinedLoss(torch.nn.Module):
         losses.append(self.get_loss_poissn(model_DP, measured_DP))
         losses.append(self.get_loss_pacbed(model_DP, measured_DP))
         losses.append(self.get_loss_sparse(object_patches[...,1], omode_occu))
+        losses.append(self.get_loss_objL1(object_patches, omode_occu))
+        losses.append(self.get_loss_objL2(object_patches, omode_occu))
+        losses.append(self.get_loss_layersTikhonov(object_patches,omode_occu))
+        losses.append(self.get_loss_spatialTikhonov(object_patches,omode_occu))
         losses.append(self.get_loss_simlar(object_patches, omode_occu))
         total_loss = sum(losses)
         return total_loss, losses

@@ -390,9 +390,21 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
         if loss_params['loss_sparse']['state']:
             output_path += f"_spr{round(loss_params['loss_sparse']['weight'],2)}"
 
+        if loss_params['loss_objL1']['state']:
+            output_path += f"_oL1{round(loss_params['loss_objL1']['weight'],2)}"
+
+        if loss_params['loss_objL2']['state']:
+            output_path += f"_oL2{round(loss_params['loss_objL2']['weight'],2)}"
+        
+        if loss_params['loss_layersTikhonov']['state']:
+            output_path += f"_lTik{round(loss_params['loss_layersTikhonov']['weight'],2)}"
+        
+        if loss_params['loss_spatialTikhonov']['state']:
+            output_path += f"_sTik{round(loss_params['loss_spatialTikhonov']['weight'],2)}"
+
         if loss_params['loss_simlar']['state']:
             output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
-
+            
     # # Attach init params (optional)
     if 'init' in recon_dir_affixes:
         if illumination == 'electron':

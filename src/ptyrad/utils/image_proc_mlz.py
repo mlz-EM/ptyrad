@@ -52,7 +52,9 @@ def normalize_within_mask(img, mask):
 
 def align_object_to_ground_truth(
     object, object_sampling,
-    ground_truth, ground_truth_sampling, rotation_angle, refinement_niter=5, srange=None):
+    ground_truth, ground_truth_sampling, rotation_angle, srange=None):
+
+    refinement_niter=5
 
     H_out, W_out = ground_truth.shape
     H_in,  W_in  = object.shape[-2:]
@@ -112,18 +114,11 @@ def align_object_to_ground_truth(
     tgt_n = normalize_within_mask(ground_truth, mask)
     rmse  = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask])**2))
 
-
-    #from here
-    obj_final = warp_with_matrix(object_mean, Mtot, (H_out, W_out))
-    mask = warp_with_matrix(np.ones_like(object_mean), Mtot, (H_out, W_out)) > 0.5
-    obj_n = normalize_within_mask(obj_final, mask)
-    tgt_n = normalize_within_mask(ground_truth, mask)
-
     if srange is None:
         rmse = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask]) ** 2))    
     else:
         rmses = []
-        for i in range(srange[0], srange[1]),:
+        for i in range(srange[0], srange[1]):
             obj_i = object[i]
             warped = warp_with_matrix(obj_i, Mtot, (H_out, W_out))
             mask = warp_with_matrix(np.ones_like(obj_i), Mtot, (H_out, W_out)) > 0.5
@@ -133,6 +128,6 @@ def align_object_to_ground_truth(
             tgt_n = normalize_within_mask(ground_truth, mask)
             rmse_i = np.sqrt(np.mean((obj_n[mask] - tgt_n[mask]) ** 2))
             rmses.append(rmse_i)
-
         rmse = np.mean(rmses) if rmses else float('inf')
+        
     return obj_n, tgt_n, rmse

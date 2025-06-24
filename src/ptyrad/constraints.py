@@ -103,16 +103,39 @@ class CombinedConstraint(torch.nn.Module):
         obj_type       = self.constraint_params['obj_zblur']['obj_type']
         obj_zblur_ks   = self.constraint_params['obj_zblur']['kernel_size']
         obj_zblur_std  = self.constraint_params['obj_zblur']['std']
+        obj_zblur_rel =  self.constraint_params['obj_zblur']['relax']
         if obj_zblur_freq is not None and niter % obj_zblur_freq == 0 and obj_zblur_std !=0:
             if obj_type in ['amplitude', 'both']:
+                original = model.opt_obja.data
                 tensor = model.opt_obja.permute(0,2,3,1)
-                model.opt_obja.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2).contiguous() # contiguous() returns a contiguous memory layout so that DDP wouldn't complain about the stride mismatch of grad and params
-                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on obja at iter {niter}", verbose=self.verbose)
+                blurred = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2).contiguous() # contiguous() returns a contiguous memory layout so that DDP wouldn't complain about the stride mismatch of grad and params
+                model.opt_obja.data = (1 - obj_zblur_rel) * blurred + obj_zblur_rel * original
+                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on obja at iter {niter} (relax = {obj_zblur_rel})", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
-                tensor = model.opt_objp.permute(0,2,3,1)
-                model.opt_objp.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2).contiguous() 
-                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on objp at iter {niter}", verbose=self.verbose)
-    
+                original = model.opt_objp.data
+                tensor = original.permute(0,2,3,1)
+                blurred = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2).contiguous()
+                model.opt_objp.data = (1 - obj_zblur_rel) * blurred + obj_zblur_rel * original
+                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on objp at iter {niter} (relax = {obj_zblur_rel})", verbose=self.verbose)
+            if obj_type == 'complex':
+                amp = model.opt_obja.data
+                pha = model.opt_objp.data
+                real = amp * torch.cos(pha)
+                imag = amp * torch.sin(pha)
+                complex_obj = torch.complex(real, imag)  # (B, o, z, y, x)
+
+                # log-domain blur
+                log_obj = torch.log(complex_obj + 1e-7)
+                tensor = log_obj.permute(0, 2, 3, 1)  # (B, y, x, z)
+                blurred_log = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0, 3, 1, 2).contiguous()
+                blurred = torch.exp(blurred_log)
+
+                # interpolate
+                mixed = (1 - obj_zblur_rel) * blurred + obj_zblur_rel * complex_obj
+                model.opt_obja.data = mixed.abs()
+                model.opt_objp.data = mixed.angle()
+                vprint(f"Apply log-Gaussian z-blur on complex object at iter {niter} (relax = {obj_zblur_rel})", verbose=self.verbose)
+
     def apply_kr_filter(self, model, niter):
         ''' Apply kr Fourier filter constraint on object '''
         # Note that the `kr_filter` is applied on stacked 2D FFT of object, so it's applying on (omode,z,ky,kx)
