@@ -12,7 +12,7 @@ import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
-from ptyrad.utils import imshift_batch, vprint
+from ptyrad.utils import imshift_batch, torch_phasor, vprint
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -216,7 +216,7 @@ class PtychoAD(torch.nn.Module):
         Ky, Kx = self.propagator_grid 
         tilts_y_full = self.opt_obj_tilts[:,0,None,None] / 1e3 # mrad, tilts_y = (N,Y,X)
         tilts_x_full = self.opt_obj_tilts[:,1,None,None] / 1e3
-        self.H_fixed_tilts_full = self.H * torch.exp(1j * dz * (Ky * torch.tan(tilts_y_full) + Kx * torch.tan(tilts_x_full))) # (1,Y,X) or (N,Y,X)
+        self.H_fixed_tilts_full = self.H * torch_phasor(dz * (Ky * torch.tan(tilts_y_full) + Kx * torch.tan(tilts_x_full))) # (1,Y,X) or (N,Y,X)
 
         # Initialize other relevant variables
         self.k = 2 * torch.pi / self.lambd
@@ -307,15 +307,8 @@ class PtychoAD(torch.nn.Module):
         # see J. Goodman, Introduction to Fourier Optics (McGraw-Hill, 1968) (PDF page 88, eqn 4-20, 4-21 as attached).
         # https://www.hlevkin.com/hlevkin/90MathPhysBioBooks/Physics/Physics/Mix/Introduction%20to%20Fourier%20Optics.pdf
         
-        # If you want to expand the opt_obj_tilts from (1,2) to (N,2), use the following lines
-        # model.opt_obj_tilts.data = torch.broadcast_to(model.opt_obj_tilts, [<N_scans>,2]).clone() # Replace <N_scans> with your actual N_scans
-        # model.set_optimizer(lr_params = {
-        # 'obja'            : 5e-4,
-        # 'objp'            : 5e-4,
-        # 'obj_tilts'       : 1e-4, 
-        # 'probe'           : 1e-4, 
-        # 'probe_pos_shifts': 1e-4})
-        # optimizer=torch.optim.Adam(model.optimizer_params)
+        # Note that torch.exp(1j*phase_shift) is not compatible with torch.compile because the 1j is a Python built-in and not a tensor,
+        # so I've replaced them with torch.polar(torch.ones_like(phase), phase), which is wrapped as a util function `torch_phasor(phase)` 
         
         # Setup boolean flags
         tilt_obj = self.tilt_obj                         # Whether we need to apply tilt to the Fresnel propagator
@@ -338,13 +331,13 @@ class PtychoAD(torch.nn.Module):
                 
         if tilt_obj and change_thickness:
             # Case 1: Tilts are either non-zero or optimizing, while thickness is optimizing 
-            H_opt_dz = torch.exp(1j * dz * Kz) # H has zero frequency at the corner in k-space
-            return H_opt_dz * torch.exp(1j * dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
+            H_opt_dz = torch_phasor(dz * Kz) # H has zero frequency at the corner in k-space
+            return H_opt_dz * torch_phasor(dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
 
         elif tilt_obj and not change_thickness:
             if change_tilt:
                 # Case 2A: Tilts are optimizing, while thickness is fixed
-                return self.H * torch.exp(1j * dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
+                return self.H * torch_phasor(dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
             else:
                 # Case 2B: Tilts are fixed non-zero values (1,2) or (N,2), while thickness is fixed
                 # Propagator is pre-calculated during init_propagator_vars
@@ -352,7 +345,7 @@ class PtychoAD(torch.nn.Module):
         
         elif not tilt_obj and change_thickness: 
             # Case 3: Tilt is fixed at 0 and thickness is optimizing
-            H_opt_dz = torch.exp(1j * dz * Kz)
+            H_opt_dz = torch_phasor(dz * Kz)
             return H_opt_dz[None,]
             
         else: 
