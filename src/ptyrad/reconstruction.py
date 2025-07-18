@@ -6,6 +6,7 @@ Reconstruction and hypertune workflows for ptychographic reconstructions
 from copy import deepcopy
 import logging
 from random import shuffle
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,6 +31,16 @@ from ptyrad.utils import (
 )
 from ptyrad.visualization import plot_pos_grouping, plot_summary
 
+# This suppresses the '..._inductor/compile_fx.py:236: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. 
+# Consider setting `torch.set_float32_matmul_precision('high')` for better performance.'
+# Although I didn't see much effect on performance because there's very little matrix multiplication in PtyRAD.
+torch.set_float32_matmul_precision('high') 
+
+# The actual performance is significantly better than 'eager' so I supress this for clarity
+warnings.filterwarnings(
+    "ignore",
+    message="Torchinductor does not support code generation for complex operators. Performance may be worse than eager."
+)
 
 class PtyRADSolver(object):
     """
@@ -626,14 +637,20 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     SAVE_ITERS        = recon_params['SAVE_ITERS']
     grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     selected_figs     = recon_params['selected_figs']
+    compiler_configs  = recon_params['compiler_configs']
     verbose           = not recon_params['if_quiet']
+    
+    # torch.compile options
+    vprint(f"### Setting PyTorch compiler with {compiler_configs} ###", verbose=verbose)
+    vprint(" ", verbose=verbose)
+    recon_step_compiled = torch.compile(recon_step, **compiler_configs)
     
     vprint("### Start the PtyRAD iterative ptycho reconstruction ###", verbose=verbose)
     
     # Optimization loop
     for niter in range(1,NITER+1):
         
-        batch_losses = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
+        batch_losses = recon_step_compiled(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
         
         # Only log the main process
         if acc is None or acc.is_main_process:
@@ -655,7 +672,6 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model_instance.iter_times):.5g} with std = {np.std(model_instance.iter_times):.3f} ###", verbose=verbose)
     vprint(" ", verbose=verbose)
 
-@torch.compile
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
     """
     Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
@@ -950,6 +966,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     output_dir        = recon_params['output_dir']
     selected_figs     = recon_params['selected_figs']
+    compiler_configs  = recon_params['compiler_configs']
     
     # Parse the hypertune_params
     hypertune_params  = params['hypertune_params']
@@ -1058,12 +1075,17 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)
     optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params, verbose=verbose)
     indices, batches, output_path = prepare_recon(model, init, params)
+    
+    # torch.compile options
+    vprint(f"### Setting PyTorch compiler with {compiler_configs} ###", verbose=verbose)
+    vprint(" ", verbose=verbose)
+    recon_step_compiled = torch.compile(recon_step, **compiler_configs)
       
     # Optimization loop
     for niter in range(1, NITER+1):
         
         shuffle(batches)
-        batch_losses = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)
+        batch_losses = recon_step_compiled(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)
 
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:

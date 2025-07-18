@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class IndicesMode(BaseModel):
@@ -48,6 +48,16 @@ class ResultModes(BaseModel):
         if not all(x in valid for x in v):
             raise ValueError("bit must contain 'raw', '32', '16', or '8'")
         return v
+
+class CompilerConfigs(BaseModel):
+    model_config = {"extra": "forbid"}
+    
+    disable: bool = Field(default=True, description="Boolean flag to turn on/off torch.compile") # Note that the torch.compile function signature default disable=False
+    fullgraph: bool = Field(default=False)
+    dynamic: Optional[bool] = Field(default=None)
+    backend: Literal['inductor', 'cudagraphs', 'ipex', 'onnxrt'] = Field(default='inductor')
+    mode: Literal['default', 'reduce-overhead', 'max-autotune', 'max-autotune-no-cudagraphs'] = Field(default='default')
+    options: Optional[dict[str, Union[str, int, bool]]] = Field(default=None)
 
 class ReconParams(BaseModel):
     """
@@ -281,3 +291,15 @@ class ReconParams(BaseModel):
     Suggested value is false for more information, but if you're running hypertune mode you should consider setting it to true.
     """
 
+    compiler_configs: Optional[CompilerConfigs] = Field(default_factory=CompilerConfigs, description="PyTorch compiler configurations")
+    """
+    This dict specifies the PyTorch JIT compiler configurations.
+    Set to {'disable': false} to enable PyTorch JIT compilation for a 30-90% speedup on supported hardware.
+    See https://docs.pytorch.org/docs/stable/generated/torch.compile.html for more details.
+    """
+    
+    @model_validator(mode="after")
+    def fill_compiler_configs_defaults(self):
+        if self.compiler_configs is None:
+            self.compiler_configs = CompilerConfigs()
+        return self
