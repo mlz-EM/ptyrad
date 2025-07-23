@@ -597,6 +597,18 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             sparse_batches = [np.array(batch) for batch in sparse_batches]
             return sparse_batches
 
+def parse_torch_compile_configs(configs):
+    """
+    Convert user-facing CompilerConfigs to dict suitable for torch.compile
+    
+    Note:
+        The params.yaml defines as 'enable': bool = False, 
+        while torch.compile takes only 'disable': bool, so a conversion is needed.
+    """
+    if 'enable' in configs:
+        configs['disable'] = not configs.pop('enable')
+    return configs
+
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
     """
     Executes the iterative optimization loop for ptychographic reconstruction.
@@ -637,7 +649,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     SAVE_ITERS        = recon_params['SAVE_ITERS']
     grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     selected_figs     = recon_params['selected_figs']
-    compiler_configs  = recon_params['compiler_configs']
+    compiler_configs  = parse_torch_compile_configs(recon_params['compiler_configs'])
     verbose           = not recon_params['if_quiet']
     
     # torch.compile options
@@ -966,7 +978,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     output_dir        = recon_params['output_dir']
     selected_figs     = recon_params['selected_figs']
-    compiler_configs  = recon_params['compiler_configs']
+    compiler_configs  = parse_torch_compile_configs(recon_params['compiler_configs'])
     
     # Parse the hypertune_params
     hypertune_params  = params['hypertune_params']

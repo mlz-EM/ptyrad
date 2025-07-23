@@ -52,7 +52,7 @@ class ResultModes(BaseModel):
 class CompilerConfigs(BaseModel):
     model_config = {"extra": "forbid"}
     
-    disable: bool = Field(default=True, description="Boolean flag to turn on/off torch.compile") # Note that the torch.compile function signature default disable=False
+    enable: bool = Field(default=False, description="Boolean flag to turn on/off torch.compile") # Note that the torch.compile function signature and default are actually disable=False
     fullgraph: bool = Field(default=False)
     dynamic: Optional[bool] = Field(default=None)
     backend: Literal['inductor', 'cudagraphs', 'ipex', 'onnxrt'] = Field(default='inductor')
@@ -294,7 +294,7 @@ class ReconParams(BaseModel):
     compiler_configs: Optional[CompilerConfigs] = Field(default_factory=CompilerConfigs, description="PyTorch compiler configurations")
     """
     This dict specifies the PyTorch JIT compiler configurations.
-    Set to {'disable': false} to enable PyTorch JIT compilation for a 30-90% speedup on supported hardware.
+    Set to {'enable': true} to enable PyTorch JIT compilation for a 1.3-1.9x speedup on supported hardware.
     See https://docs.pytorch.org/docs/stable/generated/torch.compile.html for more details.
     """
     
