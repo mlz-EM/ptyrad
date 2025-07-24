@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b10] - 2025-07-23
+### Added
+- Add `compiler_configs` to `recon_params` to allow optional PyTorch JIT compilation for significant speedup (1.9x faster on PSO tested on A100 20gb MIG). Special thanks to @dy327 and @guanxing.li for helping me testing on macOS and Windows machines! Currently the `torch.compile` works for Windows, macOS, and Linux, although it has a bit more hardware/firmware requirements including:
+  - Windows users would need to install `triton-windows` 
+  - NVIDIA GPU needs to have Compute Capability >7.0 (Volta architecture or newer).
+  - NVIDIA GPU needs to get a more modern driver version, 520.61.05 is known to be not working.
+### Changed
+- Add CUDA Compute Capability and `torch.compile` Triton info to `print_gpu_info`
+- Improve `print_system_info` by adding `platform.platform()` to show user-facing macOS version string
+- Fix incorrect MPS device count for macOS in `set_accelerator` so the CLI command of `ptyrad run` can pass the accelerator initialization
+- Add CPU fallback to `orthogonalize_modes_vec` since MPS doesn't seem to have implemented `torch.linalg.eig` yet as pointed out by @dy327
+- Fix incorrect type check for `init_tilts` to allow float values of initial tilts as pointed out by @dy327
+
 ## [0.1.0b9] - 2025-07-10
 ### Changed
 - Update README with new installation guide and references to docs, youtube, and other links
