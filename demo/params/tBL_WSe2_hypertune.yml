@@ -115,12 +115,12 @@ model_params : {
     'detector_blur_std'   : null, # type: null or float, unit: px (k-space). This applies Gaussian blur to the forward model simulated diffraction patterns to emulate the PSF of high-energy electrons on detector for experimental data. Typical value is 0-1 px (std) based on the acceleration voltage 
     'optimizer_params'    : {'name': 'Adam', 'configs': {}, 'load_state': null}, # Support all PyTorch optimizer including LBFGS because LBFGS can't set separate learning rates for different tensors. The suggested optimizer is 'Adam' with default configs (null). You can load the previous optimizer state by passing the path of `model.hdf5` to `load_state`, this way you can continue previous reconstruciton smoothly without abrupt gradients. (Because lots of the optimizers are adaptive and have history-dependent learning rate manipulation, so loading the optimizer state is necessary if you want to continue the previous optimization trajectory). However, the optimizer state must be coming from previous reconstructions with the same set of optimization variables with identical size of the dimensions otherwise it won't run.
     'update_params':{
-        'obja'            : {'start_iter': 1, 'lr': 5.0e-4}, # object amplitude
-        'objp'            : {'start_iter': 1, 'lr': 5.0e-4}, # object phase
-        'obj_tilts'       : {'start_iter': null, 'lr': 0}, # object tilts
-        'slice_thickness' : {'start_iter': null, 'lr': 0}, # object dz slice thickness 
-        'probe'           : {'start_iter': 1, 'lr': 1.0e-4},  # probe
-        'probe_pos_shifts': {'start_iter': 1, 'lr': 1.0e-4}, # sub-px probe positions
+        'obja'            : {'start_iter': 1, 'lr': 5.0e-4, 'end_iter': null}, # object amplitude
+        'objp'            : {'start_iter': 1, 'lr': 5.0e-4, 'end_iter': null}, # object phase
+        'obj_tilts'       : {'start_iter': null, 'lr': 0, 'end_iter': null}, # object tilts
+        'slice_thickness' : {'start_iter': null, 'lr': 0, 'end_iter': null}, # object dz slice thickness 
+        'probe'           : {'start_iter': 1, 'lr': 1.0e-4, 'end_iter': null},  # probe
+        'probe_pos_shifts': {'start_iter': 1, 'lr': 5.0e-4, 'end_iter': null}, # sub-px probe positions
     }
 }
 

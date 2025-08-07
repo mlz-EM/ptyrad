@@ -42,6 +42,16 @@ warnings.filterwarnings(
     message="Torchinductor does not support code generation for complex operators. Performance may be worse than eager."
 )
 
+# This will show up torch.compile but it's harmless
+warnings.filterwarnings("ignore", message=".*Profiler function.*will be ignored.*")
+
+# This will show up with DDP via accelerate but this doesn't affect multi GPU
+warnings.filterwarnings("ignore", message=".*No device id is provided.*")
+
+# This will show up when multiGPU + compile but has no affect
+warnings.filterwarnings("ignore", message=".*Dynamo does not know how to trace.*")
+
+
 class PtyRADSolver(object):
     """
     A wrapper class to perform ptychographic reconstruction or hyperparameter tuning.
@@ -652,15 +662,22 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     compiler_configs  = parse_torch_compile_configs(recon_params['compiler_configs'])
     verbose           = not recon_params['if_quiet']
     
-    # torch.compile options
-    vprint(f"### Setting PyTorch compiler with {compiler_configs} ###", verbose=verbose)
-    vprint(" ", verbose=verbose)
-    recon_step_compiled = torch.compile(recon_step, **compiler_configs)
+    # Use the method on the wrapped model (DDP) if it exists
+    model_instance = model.module if hasattr(model, "module") else model
     
     vprint("### Start the PtyRAD iterative ptycho reconstruction ###", verbose=verbose)
     
     # Optimization loop
     for niter in range(1,NITER+1):
+        
+        # Toggle the grad calculation to enable or disable AD update on tensors at certain iterations
+        toggle_grad_requires(model_instance, niter, verbose)
+        
+        # Apply torch.compile to `recon_step``
+        if niter in model_instance.compilation_iters: # compilation_iters always contain niter=1
+            vprint(f"Setting up PyTorch compiler with {compiler_configs}", verbose=verbose)
+            torch._dynamo.reset()
+            recon_step_compiled = torch.compile(recon_step, **compiler_configs)
         
         batch_losses = recon_step_compiled(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
         
@@ -670,9 +687,6 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
             ## Saving intermediate results
             if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
                 with torch.no_grad():
-                    # Use the method on the wrapped model (DDP) if it exists
-                    model_instance = model.module if hasattr(model, "module") else model
-                    
                     # Note that `params` stores the original params from the configuration file, 
                     # while `model` contains the actual params that could be updated by meas_crop, meas_pad, or meas_resample
                     save_results(output_path, model_instance, params, optimizer, niter, indices, batch_losses)
@@ -680,7 +694,6 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     ## Saving summary
                     plot_summary(output_path, model_instance, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
     
-    model_instance = model.module if hasattr(model, "module") else model
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model_instance.iter_times):.5g} with std = {np.std(model_instance.iter_times):.3f} ###", verbose=verbose)
     vprint(" ", verbose=verbose)
 
@@ -718,9 +731,6 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     
     # Use the method on the wrapped model (DDP) if it exists
     model_instance = model.module if hasattr(model, "module") else model
-    
-    # Toggle the grad calculation to disable AD update on tensors before certain iteration
-    toggle_grad_requires(model_instance, niter, verbose)
     
     # Run the iteration with closure for LBFGS optimizer
     if isinstance(optimizer, torch.optim.LBFGS):
@@ -809,16 +819,21 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     model_instance.avg_tilt_iters.append((niter, model_instance.opt_obj_tilts.detach().mean(0).cpu().numpy()))
     return batch_losses
 
-# TODO Need to find a workaround to enable this grad toggle during torch.compile
-# This is ignored by torch.compile because torch.compile will only compile the graph given the 1st iteration
-# One solution would be to calculate grads for all tensors and manually mask it, but this is a bit wasteful
-torch.compiler.disable
-def toggle_grad_requires(model, niter, verbose):
-    """Toggle requires_grad based on start iteration for each optimizable tensor."""
-    start_iter_dict = model.start_iter
+def toggle_grad_requires(model, niter, verbose=True):
+    """Toggle requires_grad based on start and end iteration for each optimizable tensor."""
+
+    vprint(" ", verbose=verbose) # Empty line for the start of each iteration
+    
     optimizable_tensors = model.optimizable_tensors
-    for param_name, start_iter in start_iter_dict.items():
-        requires_grad = start_iter is not None and niter >= start_iter
+    for param_name in model.optimizable_tensors.keys():
+        start_iter = model.start_iter.get(param_name)
+        end_iter = model.end_iter.get(param_name)
+        
+        # Determine if gradients should be enabled
+        grad_started = start_iter is not None and niter >= start_iter
+        grad_ended = end_iter is not None and niter + 1 > end_iter # end_iter is exclusive
+        requires_grad = grad_started and not grad_ended
+        
         optimizable_tensors[param_name].requires_grad = requires_grad
         vprint(f"Iter: {niter}, {param_name}.requires_grad = {requires_grad}", verbose=verbose)
 
@@ -861,7 +876,6 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
     vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, in {parse_sec_to_time_str(iter_t)}", verbose=verbose)
-    vprint(" ", verbose=verbose)
     loss_iter = sum(avg_losses.values())
     return loss_iter
 
@@ -1087,14 +1101,18 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)
     optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params, verbose=verbose)
     indices, batches, output_path = prepare_recon(model, init, params)
-    
-    # torch.compile options
-    vprint(f"### Setting PyTorch compiler with {compiler_configs} ###", verbose=verbose)
-    vprint(" ", verbose=verbose)
-    recon_step_compiled = torch.compile(recon_step, **compiler_configs)
       
     # Optimization loop
     for niter in range(1, NITER+1):
+        
+        # Toggle the grad calculation to enable or disable AD update on tensors at certain iterations
+        toggle_grad_requires(model, niter, verbose)
+        
+        # Apply torch.compile to `recon_step``
+        if niter in model.compilation_iters: # compilation_iters always contain niter=1
+            vprint(f"Setting up PyTorch compiler with {compiler_configs}", verbose=verbose)
+            torch._dynamo.reset()
+            recon_step_compiled = torch.compile(recon_step, **compiler_configs)
         
         shuffle(batches)
         batch_losses = recon_step_compiled(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)

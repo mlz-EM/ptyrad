@@ -87,12 +87,15 @@ class PtychoAD(torch.nn.Module):
 
             # Parse the learning rate and start iter for optimizable tensors
             start_iter_dict = {}
+            end_iter_dict = {}
             lr_dict = {}
             for key, params in model_params['update_params'].items():
-                start_iter_dict[key] = params['start_iter']
+                start_iter_dict[key] = params.get('start_iter')
+                end_iter_dict[key] = params.get('end_iter')
                 lr_dict[key] = params['lr']
             self.optimizer_params       = model_params['optimizer_params']
             self.start_iter             = start_iter_dict
+            self.end_iter               = end_iter_dict
             self.lr_params              = lr_dict
             
             # Optimizable parameters
@@ -140,6 +143,9 @@ class PtychoAD(torch.nn.Module):
 
             # Initialize propagator-related variables
             self.init_propagator_vars()
+            
+            # Initialize iteration numbers that require torch.compile
+            self.init_compilation_iters()
             
             vprint('### Done initializing PtychoAD model ###', verbose=verbose)
             vprint(' ', verbose=verbose)
@@ -201,7 +207,7 @@ class PtychoAD(torch.nn.Module):
             if param_name not in self.optimizable_tensors:
                 raise ValueError(f"WARNING: '{param_name}' is not a valid parameter name, check your `update_params` and choose from 'obja', 'objp', 'obj_tilts', 'slice_thickness', 'probe', and 'probe_pos_shifts'")
             else:
-                self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
+                self.optimizable_tensors[param_name].requires_grad = (lr != 0) and (self.start_iter[param_name] ==1) # Set requires_grad based on learning rate and start_iter
                 if lr != 0:
                     self.optimizable_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
         if verbose:
@@ -221,6 +227,26 @@ class PtychoAD(torch.nn.Module):
         # Initialize other relevant variables
         self.k = 2 * torch.pi / self.lambd
         self.Kz = torch.sqrt(self.k ** 2 - Kx ** 2 - Ky ** 2) # Upper case K indicates it's a 2D tensor (Y,X)
+    
+    def init_compilation_iters(self):
+        """ Initialize iteration numbers that require torch.compile """
+        compilation_iters = {1}  # Always compile at first iteration
+        
+        for param_name in self.optimizable_tensors.keys():
+            start_iter = self.start_iter.get(param_name)
+            end_iter = self.end_iter.get(param_name)
+            
+            # Add start_iter compilation points
+            if start_iter is not None and start_iter >= 1:
+                compilation_iters.add(start_iter)
+            
+            # Add end_iter compilation points
+            if end_iter is not None and end_iter >= 1:
+                # Compile at end_iter to handle the transition. end_iter is exclusive for grad calculation.
+                compilation_iters.add(end_iter)
+        
+        # Store as sorted list
+        self.compilation_iters = sorted(compilation_iters)
         
     def print_model_summary(self):
         """ Prints a summary of the model's optimizable variables and statistics. """
