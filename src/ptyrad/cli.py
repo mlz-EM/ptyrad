@@ -9,7 +9,7 @@ import argparse
 def run(args):
     from ptyrad.load import load_params
     from ptyrad.reconstruction import PtyRADSolver
-    from ptyrad.utils import CustomLogger, print_system_info, set_accelerator, set_gpu_device
+    from ptyrad.utils import CustomLogger, get_nested, print_system_info, resolve_seed_priority, set_accelerator, set_gpu_device
     
     # Setup CustomLogger
     logger = CustomLogger(
@@ -23,13 +23,14 @@ def run(args):
 
     # Set up accelerator for multiGPU/mixed-precision setting, 
     # note that these we need to call the command as:
-    # `accelerate launch --num_processes=2 --mixed_precision=fp16 -m ptyrad run <PTYRAD_ARGUMENTS> --gpuid 'acc'`
+    # `accelerate launch --num_processes=2 --mixed_precision='no' -m ptyrad run <PTYRAD_ARGUMENTS> --gpuid 'acc'`
     accelerator = set_accelerator() 
 
     print_system_info()
     params = load_params(args.params_path, validate=not args.skip_validate)
     device = set_gpu_device(args.gpuid)
-    ptycho_solver = PtyRADSolver(params, device=device, acc=accelerator, logger=logger)
+    seed = resolve_seed_priority(args_seed=args.seed, params_seed=get_nested(params, "init_params.random_seed", safe=True), acc=accelerator)
+    ptycho_solver = PtyRADSolver(params, device=device, seed=seed, acc=accelerator, logger=logger)
     ptycho_solver.run()
 
 
@@ -110,6 +111,7 @@ def main():
     parser_run.add_argument("--skip_validate", action="store_true", help="Skip parameter validation and default filling. Use only if your params file is complete and consistent.")
     parser_run.add_argument("--gpuid", type=str, required=False, default="0", help="GPU ID to use ('acc', 'cpu', or an integer)")
     parser_run.add_argument("--jobid", type=int, required=False, default=0, help="Unique identifier for hypertune mode with multiple GPU workers")
+    parser_run.add_argument("--seed", type=int, required=False, help="Random seed for improved reproducibility")
     parser_run.set_defaults(func=run)
 
     # check-gpu

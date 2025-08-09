@@ -186,6 +186,8 @@ class InitParams(BaseModel):
     model_config = {"extra": "forbid", 
                     "arbitrary_types_allowed": True} # This is needed to validate np.ndarray type
 
+    random_seed: Optional[int] = Field(default=None, description="Random seed for improved reproducibility")
+    
     # Experimental params
     probe_illum_type: Literal['electron', 'xray'] = Field(default="electron", description="Probe illumination type")
     """

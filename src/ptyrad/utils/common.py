@@ -7,10 +7,11 @@ import io
 import logging
 import os
 import platform
+import random
 import subprocess
 import warnings
 from time import perf_counter
-from typing import Union
+from typing import Union, Optional
 
 import numpy as np
 import torch
@@ -426,6 +427,39 @@ def set_gpu_device(gpuid=0):
     except ValueError:
         raise ValueError(f"Invalid gpuid '{gpuid}'. Expected 'acc', 'cpu', or an integer.")
 
+def resolve_seed_priority(args_seed, params_seed, acc):
+    
+    vprint("### Resolving random seed ###")
+    if  args_seed is not None:
+        seed = args_seed
+        vprint(f"Random seed: {seed} provided by CLI argument")
+    elif  params_seed is not None:
+        seed = params_seed
+        vprint(f"Random seed: {seed} provided by params file")
+    elif acc is not None and acc.num_processes > 1:
+        seed = 42 # seed is required otherwise the probe position with random displacement could cause objects with different shapes
+        vprint(f"Random seed: {seed} is set automatically because multi GPU is detected but no seed is provided")
+    else:
+        seed = None
+    vprint(" ")
+    return seed
+
+def set_random_seed(seed: Optional[int], deterministic: bool = False):
+    """
+    Set the random seeds for numpy and pytorch operations.
+    
+    """
+    if seed is not None:
+        random.seed(seed)                  # Python's RNG
+        np.random.seed(seed)               # NumPy RNG
+        torch.manual_seed(seed)            # PyTorch CPU RNG
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed) # All GPUs
+        
+        if deterministic:
+            # This would slow down the operation a bit: https://docs.pytorch.org/docs/stable/notes/randomness.html
+            torch.use_deterministic_algorithms(True)
+    
 @torch.compiler.disable
 def vprint(*args, verbose=True, **kwargs):
     """Verbose print/logging with individual control, only for rank 0 in DDP."""

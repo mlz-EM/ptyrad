@@ -26,6 +26,7 @@ from ptyrad.utils import (
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
     safe_filename,
+    set_random_seed,
     time_sync,
     vprint,
 )
@@ -71,13 +72,14 @@ class PtyRADSolver(object):
         device (str): The device to run the computations on (e.g., 'cuda' for GPU, 'cpu' for CPU). 
             Defaults to None to let `accelerate` automatically decide.
     """
-    def __init__(self, params, device=None, acc=None, logger=None):
+    def __init__(self, params, device=None, seed=None, acc=None, logger=None):
         self.params          = deepcopy(params)
         self.if_hypertune    = self.params.get('hypertune_params', {}).get('if_hypertune', False)
         self.verbose         = not self.params['recon_params']['if_quiet']
         self.accelerator     = acc
         self.use_acc_device  = device is None and acc is not None
         self.device          = self.accelerator.device if self.use_acc_device else device
+        self.random_seed     = seed
         self.logger          = logger
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
@@ -91,7 +93,7 @@ class PtyRADSolver(object):
         """Initializes the variables and objects needed for the reconstruction process."""
         # These components are organized into individual methods so we can re-initialize some of them if needed 
         vprint("### Initializing Initializer ###")
-        self.init          = Initializer(self.params['init_params']).init_all()
+        self.init          = Initializer(self.params['init_params'], seed=self.random_seed).init_all()
         vprint(" ")
 
     def init_loss(self):
@@ -441,7 +443,7 @@ def prepare_recon(model, init, params):
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
-    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=verbose)
+    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, seed=init_variables['random_seed'], verbose=verbose)
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
     vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=verbose)
 
@@ -497,7 +499,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_batches(indices, pos, batch_size, mode='random', verbose=True):
+def make_batches(indices, pos, batch_size, mode='random', seed=None, verbose=True):
     ''' Make batches from input indices '''
     # Input:
     #   indices: int, (Ns,) array. indices could be a subset of all indices.
@@ -536,7 +538,7 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     num_batch = len(indices) // batch_size   
     t_start = time()
     if mode == 'random':
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed)
         shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
         random_batches = np.array_split(shuffled_indices, num_batch)
         vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
@@ -546,7 +548,7 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
         # Choose the selected pos from indices
         pos_s = pos[indices]
         # Kmeans for clustering
-        kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_batch, max_iter=10, batch_size=3072)
+        kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_batch, max_iter=10, batch_size=3072, random_state=seed)
         kmeans.fit(pos_s)
         labels = kmeans.labels_
         
@@ -738,6 +740,8 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
         # Make nested list of batches for the closure with internal grad accumulation over mini-batches
         num_batch = len(batches)
         batch_indices = np.arange(num_batch)
+        if model.random_seed is not None:
+            set_random_seed(seed=model.random_seed + niter) # This ensures batch_indices is different for each iter in a reproducible way
         np.random.shuffle(batch_indices)
         accu_batch_indices = np.array_split(batch_indices,num_batch//grad_accumulation)
         
@@ -1114,6 +1118,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             torch._dynamo.reset()
             recon_step_compiled = torch.compile(recon_step, **compiler_configs)
         
+        if model.random_seed is not None:
+            set_random_seed(seed=model.random_seed + niter) # This ensures the batches order are different for each iter in a reproducible way
         shuffle(batches)
         batch_losses = recon_step_compiled(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)
 

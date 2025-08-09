@@ -33,12 +33,13 @@ from ptyrad.utils import (
     make_stem_probe,
     near_field_evolution,
     power_law,
+    set_random_seed,
     vprint,
 )
 
 
 class Initializer:
-    def __init__(self, init_params, verbose=True):
+    def __init__(self, init_params, seed=None, verbose=True):
         
         # A deepcopy creates a new object so modifying self.init_params won't affect the original init_params dict that was outside the class
         # This is important because self.init_params might get updated if there's cropping, padding, or resampling of the measurements
@@ -47,7 +48,8 @@ class Initializer:
         
         self.init_params = deepcopy(init_params) # This is the central params dict that will be used for initialization
         self.init_params_original = deepcopy(init_params)
-        self.init_variables = {} # This dict stores all the variables that will be used for the later ptychography reconstruction
+        self.init_variables = {'random_seed': seed} # This dict stores all the variables that will be used for the later ptychography reconstruction
+        self.random_seed = seed
         self.verbose=verbose
         self.print_init_params()
     
@@ -1177,6 +1179,7 @@ class Initializer:
         vprint(f"After applying normalization: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"Mean total electron per pattern = meas.sum((-2,-1)).mean(0) = ({meas.sum((-2,-1)).mean(0):.5f})", verbose=self.verbose)
 
+        set_random_seed(seed=self.random_seed)
         meas = np.random.poisson(meas * total_electron)
         vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
         vprint(f"After applying Poisson noise: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
@@ -1528,6 +1531,7 @@ class Initializer:
     def _pos_scan_add_random_displacement(self, pos, scan_rand_std):
         if scan_rand_std is not None:
             vprint(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions", verbose=self.verbose)
+            set_random_seed(seed=self.random_seed)
             pos = pos + scan_rand_std * np.random.randn(*pos.shape)
         return pos
     
@@ -1626,6 +1630,7 @@ class Initializer:
                 Ny, Nx = self.init_variables['obj_lateral_extent']
                 
         obj_shape = (omode, Nz, Ny, Nx)
+        set_random_seed(seed=self.random_seed)
         obj = np.exp(1j * 1e-8 * np.random.rand(*obj_shape))
         return obj
     

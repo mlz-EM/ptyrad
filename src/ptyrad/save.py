@@ -127,6 +127,7 @@ def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_
                      'shift_probes'     : model.shift_probes,
                      'probe_int_sum'    : model.probe_int_sum
                      },
+                'random_seed'           : model.random_seed,
                 'loss_iters'            : model.loss_iters,
                 'iter_times'            : model.iter_times,
                 'dz_iters'              : model.dz_iters,

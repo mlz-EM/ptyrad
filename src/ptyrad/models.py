@@ -118,6 +118,7 @@ class PtychoAD(torch.nn.Module):
             self.register_buffer      ('dk',              torch.tensor(init_variables['dk'],               dtype=torch.float32, device=device))# Saving this for reference
             self.register_buffer      ('lambd',           torch.tensor(init_variables['lambd'],            dtype=torch.float32, device=device))
             
+            self.random_seed            = init_variables['random_seed']                                                           # Saving this for reference
             self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
             self.tilt_obj               = bool(self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts))          # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = bool(self.lr_params['probe_pos_shifts'] != 0)                                           # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
