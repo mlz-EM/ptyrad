@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 import scipy.io as sio
 
-from ptyrad.utils import get_nested, handle_hdf5_types, list_nested_keys, tensors_to_ndarrays, vprint
+from ptyrad.utils import get_nested, handle_hdf5_types, list_nested_keys, normalize_constraint_params, tensors_to_ndarrays, vprint
 
 KeyType = Union[str, list[str], None]
 
@@ -562,6 +562,10 @@ def load_params(file_path: str, validate: bool = True):
         params_dict =  load_py_params(param_path)
     else:
         raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
+    
+    # Additional correction for constraint_params (temporarily added for smooth transition to v0.1.0b11)
+    if params_dict.get('constraint_params') is not None:
+        params_dict['constraint_params'] = normalize_constraint_params(params_dict['constraint_params'])
     
     # Pass into PtyRADParams (pydantic model) for default filling and validation
     if validate:

@@ -118,8 +118,8 @@ class PtyRADSolver(object):
         # Print constraint params
         vprint("Active constraint types:")
         for key, value in constraint_params.items():
-            if value.get('freq', None) is not None:
-                vprint(f"  {key.ljust(12)}: {value}")
+            if value.get('start_iter', None) is not None:
+                vprint(f"  {key.ljust(14)}: {value}")
                 
         self.constraint_fn = CombinedConstraint(constraint_params, device=self.device, verbose=self.verbose)
         vprint(" ")

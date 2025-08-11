@@ -387,20 +387,20 @@ def make_output_folder(
 
     # Attach constraint params (optional)
     if "constraint" in recon_dir_affixes:
-        if constraint_params["kr_filter"]["freq"] is not None:
+        if constraint_params["kr_filter"]["start_iter"] is not None:
             obj_type = constraint_params["kr_filter"]["obj_type"]
             kr_str = {"both": "kr", "amplitude": "kra", "phase": "krp"}.get(obj_type)
             radius = constraint_params["kr_filter"]["radius"]
             parts.append(f"{kr_str}f{radius}")
 
-        if constraint_params["kz_filter"]["freq"] is not None:
+        if constraint_params["kz_filter"]["start_iter"] is not None:
             obj_type = constraint_params["kz_filter"]["obj_type"]
             kz_str = {"both": "kz", "amplitude": "kza", "phase": "kzp"}.get(obj_type)
             beta = constraint_params["kz_filter"]["beta"]
             parts.append(f"{kz_str}f{beta}")
 
         if (
-            constraint_params["obj_rblur"]["freq"] is not None
+            constraint_params["obj_rblur"]["start_iter"] is not None
             and constraint_params["obj_rblur"]["std"] != 0
         ):
             obj_type = constraint_params["obj_rblur"]["obj_type"]
@@ -408,39 +408,39 @@ def make_output_folder(
             parts.append(f"{obj_str}rblur{constraint_params['obj_rblur']['std']}")
 
         if (
-            constraint_params["obj_zblur"]["freq"] is not None
+            constraint_params["obj_zblur"]["start_iter"] is not None
             and constraint_params["obj_zblur"]["std"] != 0
         ):
             obj_type = constraint_params["obj_zblur"]["obj_type"]
             obj_str = {"both": "o", "amplitude": "oa", "phase": "op"}.get(obj_type)
             parts.append(f"{obj_str}zblur{constraint_params['obj_zblur']['std']}")
 
-        if constraint_params["complex_ratio"]["freq"] is not None:
+        if constraint_params["complex_ratio"]["start_iter"] is not None:
             obj_type = constraint_params["complex_ratio"]["obj_type"]
             obj_str = {"both": "o", "amplitude": "oa", "phase": "op"}.get(obj_type)
             alpha1 = round(constraint_params["complex_ratio"]["alpha1"], 2)
             alpha2 = round(constraint_params["complex_ratio"]["alpha2"], 2)
             parts.append(f"{obj_str}cplx{alpha1}_{alpha2}")
 
-        if constraint_params["mirrored_amp"]["freq"] is not None:
+        if constraint_params["mirrored_amp"]["start_iter"] is not None:
             scale = round(constraint_params["mirrored_amp"]["scale"], 2)
             power = round(constraint_params["mirrored_amp"]["power"], 2)
             parts.append(f"mamp{scale}_{power}")
 
-        if constraint_params["obja_thresh"]["freq"] is not None:
+        if constraint_params["obja_thresh"]["start_iter"] is not None:
             parts.append(f"oathr{round(constraint_params['obja_thresh']['thresh'][0], 2)}")
 
-        if constraint_params["objp_postiv"]["freq"] is not None:
+        if constraint_params["objp_postiv"]["start_iter"] is not None:
             mode = constraint_params["objp_postiv"].get("mode", "clip_neg")
             mode_str = "s" if mode == "subtract_min" else "c"
             relax = constraint_params["objp_postiv"]["relax"]
             relax_str = "" if relax == 0 else f"{round(relax, 2)}"
             parts.append(f"opos{mode_str}{relax_str}")
 
-        if constraint_params["tilt_smooth"]["freq"] is not None:
+        if constraint_params["tilt_smooth"]["start_iter"] is not None:
             parts.append(f"tsm{round(constraint_params['tilt_smooth']['std'], 2)}")
 
-        if constraint_params["probe_mask_k"]["freq"] is not None:
+        if constraint_params["probe_mask_k"]["start_iter"] is not None:
             parts.append(f"pmk{round(constraint_params['probe_mask_k']['radius'], 2)}")
 
     # Attach loss params (optional)

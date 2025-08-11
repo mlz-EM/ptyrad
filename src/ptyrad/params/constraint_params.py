@@ -2,17 +2,21 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+# 2025.08.10 CHL: 'freq' is deprecated since PtyRAD v0.1.0b11 and it might be removed at stable release of 0.1.0.
 
 class OrthoPmode(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying orthogonalization to mixed-state probe")
-
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying orthogonalization to mixed-state probe")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying orthogonalization to mixed-state probe")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying orthogonalization to mixed-state probe")
 
 class ProbeMaskK(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=None, ge=1, description="Frequency of applying k-space probe mask")
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying k-space probe mask")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying k-space probe mask")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying k-space probe mask")
     radius: float = Field(default=0.22, ge=0.0, description="Radius of sigmoid mask in relative kMax units")
     width: float = Field(default=0.05, ge=0.0, description="Width of sigmoid mask transition")
     power_thresh: float = Field(default=0.95, ge=0.0, le=1.0, description="Power threshold for probe modes")
@@ -21,22 +25,28 @@ class ProbeMaskK(BaseModel):
 class FixProbeInt(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of rescaling probe intensity")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of rescaling probe intensity")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of rescaling probe intensity")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of rescaling probe intensity")
 
 
 class ObjRblur(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying lateral Gaussian blur")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying lateral Gaussian blur")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying lateral Gaussian blur")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying lateral Gaussian blur")
     obj_type: Literal["amplitude", "phase", "both"] = Field(default="both", description="Object type for blur")
     kernel_size: int = Field(default=5, ge=1, description="Kernel size for Gaussian blur (odd, >6*std+1)")
-    std: float = Field(default=0.5, ge=0.0, description="Standard deviation for Gaussian blur")
+    std: float = Field(default=0.4, ge=0.0, description="Standard deviation for Gaussian blur")
 
 
 class ObjZblur(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying z-direction Gaussian blur")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying z-direction Gaussian blur")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying z-direction Gaussian blur")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying z-direction Gaussian blur")
     obj_type: Literal["amplitude", "phase", "both"] = Field(default="both", description="Object type for blur")
     kernel_size: int = Field(default=5, ge=1, description="Kernel size for Gaussian blur (odd, >6*std+1)")
     std: float = Field(default=1.0, ge=0.0, description="Standard deviation for Gaussian blur")
@@ -45,7 +55,9 @@ class ObjZblur(BaseModel):
 class KrFilter(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=None, ge=1, description="Frequency of applying lateral Fourier filter")
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying lateral Fourier filter")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying lateral Fourier filter")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying lateral Fourier filter")
     obj_type: Literal["amplitude", "phase", "both"] = Field(default="both", description="Object type for filter")
     radius: float = Field(default=0.15, ge=0.0, description="Radius of sigmoid filter in relative kMax units")
     width: float = Field(default=0.05, ge=0.0, description="Width of sigmoid filter transition")
@@ -54,7 +66,9 @@ class KrFilter(BaseModel):
 class KzFilter(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=None, ge=1, description="Frequency of applying arctan kz filter")
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying arctan kz filter")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying arctan kz filter")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying arctan kz filter")
     obj_type: Literal["amplitude", "phase", "both"] = Field(default="both", description="Object type for filter")
     beta: float = Field(default=1.0, ge=0.0, description="Strength of arctan function")
     alpha: float = Field(default=1.0, ge=0.0, description="Lateral Fourier filtering constant")
@@ -63,7 +77,9 @@ class KzFilter(BaseModel):
 class ComplexRatio(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=None, ge=1, description="Frequency of applying complex constraint")
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying complex constraint")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying complex constraint")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying complex constraint")
     obj_type: Literal["amplitude", "phase", "both"] = Field(default="both", description="Object type for constraint")
     alpha1: float = Field(default=1.0, description="Alpha1 parameter for complex constraint")
     alpha2: float = Field(default=0.0, description="Alpha2 parameter for complex constraint")
@@ -72,7 +88,9 @@ class ComplexRatio(BaseModel):
 class MirroredAmp(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying mirrored amplitude constraint")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying mirrored amplitude constraint")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying mirrored amplitude constraint")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying mirrored amplitude constraint")
     relax: float = Field(default=0.1, ge=0.0, le=1.0, description="Relaxation parameter for thresholding")
     scale: float = Field(default=0.03, ge=0.0, description="Scale parameter for amplitude constraint")
     power: float = Field(default=4.0, ge=0.0, description="Power parameter for amplitude constraint")
@@ -81,7 +99,9 @@ class MirroredAmp(BaseModel):
 class ObjaThresh(BaseModel):
     model_config = {"extra": "forbid"}
     
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying object amplitude thresholding")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying object amplitude thresholding")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying object amplitude thresholding")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying object amplitude thresholding")
     relax: float = Field(default=0.0, ge=0.0, le=1.0, description="Relaxation parameter for thresholding")
     thresh: List[float] = Field(
         default=[0.98, 1.02],
@@ -93,14 +113,18 @@ class ObjaThresh(BaseModel):
 class ObjpPostiv(BaseModel):
     model_config = {"extra": "forbid"}
 
-    freq: Optional[int] = Field(default=1, ge=1, description="Frequency of applying positivity constraint")
+    start_iter: Optional[int] = Field(default=1, ge=1, description="Start iteration of applying positivity constraint")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying positivity constraint")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying positivity constraint")
     relax: float = Field(default=0.0, ge=0.0, le=1.0, description="Relaxation parameter for positivity")
 
 
 class TiltSmooth(BaseModel):
     model_config = {"extra": "forbid"}
 
-    freq: Optional[int] = Field(default=None, ge=1, description="Frequency of applying tilt smoothing")
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying tilt smoothing")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying tilt smoothing")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying tilt smoothing")
     std: float = Field(default=2.0, ge=0.0, description="Standard deviation for Gaussian blur of tilts")
 
 
@@ -110,12 +134,13 @@ class ConstraintParams(BaseModel):
 
     Generally, these constraint functions are applied after each (or a couple) iteration(s) to stabilize the optimization trajectories
     When applied, the target tensor is passed through the constraint function, and the tensor get directly modified by the constraint function
-    Set 'freq' to a positive integer to specify how often do we want to apply such constraint. 
-    For example, 'freq' = 1 would apply the constraint after every iteration, and setting 'freq' to null would disable that constraint. 
+    Set 'start_iter' to a positive integer to specify when do we want to apply such constraint, and setting 'start_iter' to 'null' would disable that constraint.
+    'step' can be set to specify the interval of applying those constraints when (niter - start_iter) % step == 0.
+    'end_iter' can be used to specify when to stop applying such constraint. 
+    Note that end_iter is exclusive, so if end_iter: 20, the constraint would not be applied at the end of Iter: 20.
     Most constraints are designed specifically for an optimizable tensor to make sure they're following some arbitrary preference
     In other words, we typically choose the constraints according to our optimizable tensors. 
-    For example, we need 'ortho_pmode' if we're optimizing mixed-state probe. 
-    Similarly, we need either 'obj_zblur' or 'kz_filter' to stabilize the multislice ptychography reconstruciton along z-direction.
+    For example, we need 'ortho_pmode' if we're optimizing mixed-state probe. Similarly, we need either 'obj_zblur' or 'kz_filter' to stabilize the multislice ptychography reconstruciton along z-direction.
     A common combination of constrains for mixed-state probe multislice ptychography would be 'ortho_pmode', 'fix_probe_int', 'kz_filter', and 'objp_postiv'
     """
     model_config = {"extra": "forbid"}
