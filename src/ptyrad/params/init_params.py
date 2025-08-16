@@ -438,6 +438,16 @@ class InitParams(BaseModel):
     The syntax is the same as np.transpose()
     """
 
+    probe_add_df: Optional[float] = Field(default=None, description="Additional defocus for probe")
+    """
+    type: null or float. 
+    unit: Ang for electron and m for x-ray. 
+    This applies additional defocus to the initialized probe. 
+    The sign convention is the same as 'probe_defocus', 
+    where positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention. 
+    This is used to shift the probe focus vertically along the object depth dimension in accordance with the object z-recentering.
+    """
+    
     pos_scan_flipT: Optional[List[int]] = Field(default=None, description="Flip and transpose for scan patterns")
     """
     type: null or list of 3 binary booleans (0 or 1) as [flipup, fliplr, transpose] just like PtychoShleves. 

@@ -464,11 +464,14 @@ def make_output_folder(
         if illumination == "electron":
             init_conv_angle = init_params["probe_conv_angle"]
             init_defocus = init_params["probe_defocus"]
+            init_add_df = init_params["probe_add_df"]
             init_c3 = init_params["probe_c3"]
             init_c5 = init_params["probe_c5"]
             parts.append(f"ca{init_conv_angle:.3g}")
             if init_defocus != 0:
                 parts.append(f"df{init_defocus:.3g}")
+            if init_add_df is not None and init_add_df != 0:
+                parts.append(f"add_df{init_add_df:.3g}")
             if init_c3 != 0:
                 parts.append(f"c3{format(init_c3, '.0e')}")
             if init_c5 != 0:

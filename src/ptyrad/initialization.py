@@ -249,6 +249,7 @@ class Initializer:
         if  probe_illum_type == 'electron':
             voltage     = self.init_params['probe_kv']
             wavelength  = get_EM_constants(voltage, output_type='wavelength')
+            unit_str    = 'Ang'
             conv_angle  = self.init_params['probe_conv_angle']
             Npix        = self.init_params['meas_Npix']
             N_scan_slow = self.init_params['pos_N_scan_slow']
@@ -282,6 +283,7 @@ class Initializer:
         elif probe_illum_type == 'xray':
             energy      = self.init_params['beam_kev']
             wavelength  = 1.23984193e-9 / energy
+            unit_str    = 'm'
             dx          = self.init_params['probe_dx']
             N_scan_slow = self.init_params['probe_N_scan_slow']
             N_scan_fast = self.init_params['probe_N_scan_fast']
@@ -306,6 +308,9 @@ class Initializer:
                 vprint(f'  Npix               = {Npix} px')
                 vprint(f'  dx                 = {dx} m')
         
+        else:
+            raise ValueError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        
         # Save general values into init_variables
         # While they aren't necessarily "critical" for all initialization scenarios (like some variables aren't needed when we load things),
         # But it's better to request these experimental parameters from users, since most of them should come with the measurements.
@@ -314,6 +319,8 @@ class Initializer:
         
         # TODO: May consider use here to centralize the initalizaiton of all useful/derived variables
         self.init_variables['probe_illum_type'] = probe_illum_type
+        self.init_variables['lambd']            = wavelength # Ang for electron, m for x-ray
+        self.init_variables['length_unit']      = unit_str
         self.init_variables['Npix']             = Npix
         self.init_variables['probe_shape']      = np.array([Npix, Npix]).astype(float) # Keep this at float for later init_pos
         self.init_variables['N_scan_slow']      = N_scan_slow
@@ -421,24 +428,16 @@ class Initializer:
         probe_shape = self.init_variables['probe_shape']
         dx = self.init_variables['dx']
         slice_thickness = self.init_variables['slice_thickness']
-        probe_illum_type = self.init_variables['probe_illum_type']
-        
-        if probe_illum_type == 'electron':
-            lambd = get_EM_constants(self.init_params['probe_kv'], 'wavelength')
-            unit_str = 'Ang'
-        elif probe_illum_type == 'xray':
-            lambd = 1.23984193e-9 / (self.init_params['beam_kev'])
-            unit_str = 'm'
-        else:
-            raise ValueError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        lambd = self.init_variables['lambd']
+        unit_str = self.init_variables['length_unit']
         
         vprint(f"Calculating H with probe_shape = {probe_shape} px, dx = {dx:.4f} {unit_str}, slice_thickness = {slice_thickness:.4f} {unit_str}, lambd = {lambd:.4f} {unit_str}", verbose=self.verbose)
         
         H = near_field_evolution(probe_shape, dx, slice_thickness, lambd)
         H = H.astype('complex64')
-        vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
-        self.init_variables['lambd'] = lambd
         self.init_variables['H'] = H
+        
+        vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
     
     def init_obj_tilts(self):
@@ -1331,6 +1330,7 @@ class Initializer:
         
         probe = self._probe_permute(probe, self.init_params.get('probe_permute'))
         probe = self._probe_set_pmode_max(probe, pmode_max, pmode_init_pows, orthogonalize=True, sort=True)
+        probe = self._probe_add_df(probe, self.init_params.get('probe_add_df'))
         probe = self._probe_normalize(probe, self.init_params.get('probe_normalize'))
         return probe
 
@@ -1382,6 +1382,26 @@ class Initializer:
             probe_final = sort_by_mode_int_np(probe_final)
             
         return probe_final
+    
+    def _probe_add_df(self, probe, df):
+        """
+        Adding user-specified defocus to the initialized probe. This is used for shifting the reconstructed probe along depth.
+        
+        Note that df is the same convention with PtychoShelves/fold_slice and abTEM with the Kirkland convention, where positive defocus is underfocus.
+        """
+        
+        if df is None or df != 0:
+            return probe
+
+        else:
+            dx = self.init_variables['dx']
+            lambd = self.init_variables['lambd']
+            unit_str = self.init_variables['length_unit']
+            
+            vprint(f"Adding additional probe defocus = {df} {unit_str}", verbose=self.verbose)
+            H = near_field_evolution(probe.shape[-2:], dx, df, lambd)
+            probe_shifted = np.fft.ifft2(H[None,] * np.fft.fft2(probe))
+            return probe_shifted
     
     def _probe_normalize(self, probe, norm_cfg):
         """

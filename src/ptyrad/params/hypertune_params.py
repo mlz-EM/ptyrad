@@ -127,6 +127,7 @@ class TuneParams(BaseModel):
     pmode_max:  TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="int",   kwargs={"low": 1, "high": 8, "step": 1}), description="Probe modes")
     conv_angle: TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="float", kwargs={"low": 24, "high": 26, "step": 1}), description="Convergence angle (mrad)")
     defocus:    TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="float", kwargs={"low": -50, "high": 50, "step": 0.1}), description="Defocus (Ang)")
+    add_df:     TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="float", kwargs={"low": -50, "high": 50, "step": 10}), description="Additional Defocus (Ang)")
     c3:         TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="float", kwargs={"low": 4000, "high": 10000, "step": 100}), description="C3 aberration (Ang)")
     c5:         TuneParam = Field(default_factory=lambda: TuneParam(state=False, suggest="float", kwargs={"low": 50000, "high": 100000, "step": 5000}), description="C5 aberration (Ang)")
     # Multislice object

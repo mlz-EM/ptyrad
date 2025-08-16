@@ -1045,9 +1045,9 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         init.init_obj()
         init.init_H()
         
-    # probe_params (pmode_max, conv_angle, defocus, c3, c5)
+    # probe_params (pmode_max, conv_angle, defocus, add_df, c3, c5)
     remake_probe = False
-    for vname in ['pmode_max', 'conv_angle', 'defocus', 'c3', 'c5']:
+    for vname in ['pmode_max', 'conv_angle', 'defocus', 'add_df', 'c3', 'c5']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
             init.init_params['probe_' + vname] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
