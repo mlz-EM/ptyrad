@@ -15,7 +15,7 @@ import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.load import load_mat, load_hdf5, load_array_from_file, load_ptyrad
+from ptyrad.load import load_array_from_file, load_hdf5, load_mat, load_ptyrad
 from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
@@ -32,8 +32,10 @@ from ptyrad.utils import (
     make_mixed_probe,
     make_stem_probe,
     near_field_evolution,
+    orthogonalize_modes_vec_np,
     power_law,
     set_random_seed,
+    sort_by_mode_int_np,
     vprint,
 )
 
@@ -332,13 +334,10 @@ class Initializer:
         probe = self._load_probe()
         probe = self._process_probe(probe)
         
-        # Set the maximum pmode
-        pmode_max = self.init_params['probe_pmode_max']
-        probe = probe[:pmode_max]
+        self.init_variables['probe'] = probe
 
         # Print summary
         vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
-        self.init_variables['probe'] = probe
         vprint(" ", verbose=self.verbose)
 
     def init_pos(self):
@@ -376,10 +375,7 @@ class Initializer:
 
         obj = self._load_obj()
         obj = self._process_obj(obj)
-        
-        # Set the maximum omode
-        omode_max = self.init_params['obj_omode_max']
-        obj = obj[:omode_max].astype('complex64')
+        obj = obj.astype('complex64')
         
         self.init_variables['obj'] = obj
 
@@ -1326,11 +1322,15 @@ class Initializer:
 
     def _process_probe(self, probe):
         """
-        Process the loaded probe, including permutation, normalization
+        Process the loaded probe, including permutation, setting pmode, and normalization
         """
         # If the processing config is None, the methods will skip it internally
         
+        pmode_max = self.init_params.get('probe_pmode_max')
+        pmode_init_pows = self.init_params.get('probe_pmode_init_pows')
+        
         probe = self._probe_permute(probe, self.init_params.get('probe_permute'))
+        probe = self._probe_set_pmode_max(probe, pmode_max, pmode_init_pows, orthogonalize=True, sort=True)
         probe = self._probe_normalize(probe, self.init_params.get('probe_normalize'))
         return probe
 
@@ -1342,6 +1342,46 @@ class Initializer:
             vprint(f"Permuting probe with order = {order}", verbose=self.verbose)
             probe = probe.transpose(order)
         return probe
+    
+    def _probe_set_pmode_max(self, probe, pmode_max, pmode_init_pows, orthogonalize=True, sort=True):
+        """
+        Either cap or pad the pmode for mixed state probe with optional orthogonalization and sorting
+        
+        """
+        pmode_now = probe.shape[0]
+        probe_int_sum = np.sum(np.abs(probe)**2)
+        pmode_init_pow = [min(pmode_init_pows)] # pmode_init_pows is a list of float(s), so we convert it into a list of float
+        
+        if pmode_now > pmode_max:
+            vprint(f"pmode_now: {pmode_now} and pmode_max: {pmode_max}, capping the pmode.", verbose=self.verbose)
+            probe_final = probe[:pmode_max]
+        
+        elif pmode_now == pmode_max:
+            vprint(f"pmode_now: {pmode_now} and pmode_max: {pmode_max}, leaving the pmode unchanged.", verbose=self.verbose)
+            probe_final = probe
+        
+        else: # pmode_now <= pmode_max: # Need to pad new probe modes
+            vprint(f"pmode_now: {pmode_now} and pmode_max: {pmode_max}, padding the pmode.", verbose=self.verbose)
+            num_new_modes = pmode_max - pmode_now
+            vprint(f"Creating {num_new_modes} new probe modes from the major mode", verbose=self.verbose)
+            mixed_probe_temp = make_mixed_probe(probe[0], pmode_max, pmode_init_pow, verbose=False) # Take the strongest probe mode and make a temporary new mixed probe (int sum at 1)
+            new_modes = mixed_probe_temp[-num_new_modes:] * probe_int_sum ** 0.5 # Normalize the new mode intensity with original intensity
+            probe_final = np.concatenate((probe, new_modes), axis=0) # Total int = 1 + num_new_modes * pmode_init_pow, will normalize it later
+            
+        # Normalize back to original intensity
+        normalization_factor = (np.sum(np.abs(probe_final) ** 2) / probe_int_sum) ** 0.5
+        probe_final = probe_final / normalization_factor
+        
+        # Optional orthogonalization and sorting
+        if orthogonalize:
+            vprint(f"Orthogonalizing {len(probe_final)} pmodes", verbose=self.verbose)
+            probe_final = orthogonalize_modes_vec_np(probe_final)
+            
+        if sort:
+            vprint(f"Sorting {len(probe_final)} pmodes by their intensities", verbose=self.verbose)
+            probe_final = sort_by_mode_int_np(probe_final)
+            
+        return probe_final
     
     def _probe_normalize(self, probe, norm_cfg):
         """
@@ -1638,5 +1678,53 @@ class Initializer:
         
         # TODO: Add resampling, padding, for multislice obj
         # Note that these methods would need to update `init_params`` and then call `set_variables_dict`` for the `init_variables``
+        omode_max = self.init_params.get('obj_omode_max')
 
+        obj = self._object_set_omode_max(obj, omode_max)
+        
         return obj
+    
+    def _object_set_omode_max(self, obj, omode_max):
+        """
+        Either cap or pad the omode for mixed state object
+        
+        """
+        omode_now = obj.shape[0]
+        
+        if omode_now > omode_max:
+            vprint(f"omode_now: {omode_now} and omode_max: {omode_max}, capping the omode.", verbose=self.verbose)
+            obj_final = obj[:omode_max]
+        
+        elif omode_now == omode_max:
+            vprint(f"omode_now: {omode_now} and omode_max: {omode_max}, leaving the omode unchanged.", verbose=self.verbose)
+            obj_final = obj
+        
+        else: # omode_now <= omode_max: # Need to pad new probe modes
+            vprint(f"omode_now: {omode_now} and omode_max: {omode_max}, padding the omode.", verbose=self.verbose)
+            num_new_modes = omode_max - omode_now
+            vprint(f"Creating {num_new_modes} new object modes from the mean and std of original object modes", verbose=self.verbose)
+            
+            # Assign variables
+            obja = np.abs(obj)
+            objp = np.angle(obj)
+            spatial_dims = obj[0].shape # (z,y,x)
+            obja_mean = np.mean(obja, axis=0, keepdims=True)
+            obja_std = np.std(obja, axis=0, keepdims=True)
+            objp_mean = np.mean(objp, axis=0, keepdims=True)
+            objp_std = np.std(objp, axis=0, keepdims=True)
+            
+            # Create new modes from random variable eps, note that amplitude and phase are perfectly correlated here
+            set_random_seed(seed=self.random_seed)
+            eps = np.random.randn(num_new_modes,*spatial_dims) # (num_new_modes, z, y, x)
+            obja_new = obja_mean + eps * obja_std
+            objp_new = objp_mean + eps * objp_std
+            
+            # Check min and max
+            obja_new = np.clip(obja_new, a_min=np.min(obja), a_max=np.max(obja))
+            objp_new = np.clip(objp_new, a_min=np.min(objp), a_max=np.max(objp))
+            
+            # Recombine amplitude and phase back to complex-valued obj
+            new_modes = obja_new * np.exp(1j * objp_new)
+            obj_final = np.concatenate((obj, new_modes), axis=0)
+            
+        return obj_final

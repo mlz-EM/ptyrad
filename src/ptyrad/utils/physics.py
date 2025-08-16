@@ -471,6 +471,54 @@ def hermite_like(fundam, M, N):
 
     return H
 
+def sort_by_mode_int_np(modes):
+    spatial_axes = tuple(range(1, modes.ndim))
+    modes_int = np.sum(np.abs(modes)**2, axis=spatial_axes)
+    indices = np.argsort(modes_int)[::-1]  # sort descending
+    modes = modes[indices]
+    return modes
+
+def orthogonalize_modes_vec_np(modes, sort=False):
+    """
+    Orthogonalize the modes using SVD-like procedure via eigen decomposition.
+
+    Parameters
+    ----------
+    modes : np.ndarray
+        Input modes of shape (Nmode, Ny, Nx), complex.
+    sort : bool, optional
+        Whether to sort modes by their intensity (norm), by default False.
+
+    Returns
+    -------
+    np.ndarray
+        Orthogonalized modes of the same shape as input.
+    """
+
+    orig_dtype = modes.dtype
+    modes = modes.astype(np.complex128) # temporarily cast to complex128 for more precise orthogonalization
+
+    input_shape = modes.shape
+    n_modes = input_shape[0]
+
+    # Reshape into (Nmode, Ny*Nx)
+    modes_reshaped = modes.reshape(n_modes, -1)
+
+    # Gram matrix A = M @ M^H (Nmode x Nmode)
+    A = modes_reshaped @ modes_reshaped.conj().T
+
+    # Eigen-decomposition
+    eigvals, eigvecs = np.linalg.eig(A)
+
+    # Project original modes into orthogonalized space
+    ortho_modes = eigvecs.conj().T @ modes_reshaped
+    ortho_modes = ortho_modes.reshape(input_shape)
+
+    if sort:
+        ortho_modes = sort_by_mode_int_np(ortho_modes)
+    
+    return ortho_modes.astype(orig_dtype)
+
 # Propagator functions
 def near_field_evolution(Npix_shape, dx, dz, lambd):
     """ Fresnel propagator """

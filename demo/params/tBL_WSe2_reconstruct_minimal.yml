@@ -15,7 +15,7 @@ init_params : {
     'pos_N_scan_fast'        : 128, # type: int, unit: #. Number of scan position along fast scan direction. Usually it's the horizontal direction of acquisition GUI
     'pos_scan_step_size'     : 0.4290, # type: float, unit: Ang. Step size between probe positions in a rectangular raster scan pattern
     # Model complexity
-    'probe_pmode_max'        : 6, # type: int, unit: #. Maximum number of mixed probe modes. Set to pmode_max = 1 for single probe state, pmode_max > 1 for mixed-state probe during initialization. For simulated initial probe, it'll be generated with the specified number of probe modes. For loaded probe, the pmode dimension would be capped at this number
+    'probe_pmode_max'        : 6, # type: int, unit: #. Maximum number of mixed probe modes. Set to pmode_max = 1 for single probe state, pmode_max > 1 for mixed-state probe during initialization. For simulated initial probe, it'll be generated with the specified number of probe modes. For loaded probe, the pmode dimension would be capped or padded to this number
     'obj_Nlayer'             : 6, # type: int, unit: #. Number of slices for multislice object
     'obj_slice_thickness'    : 2, # type: float, unit: Ang. Slice thickness (propagation distance) for multislice ptychography. Typical values are between 1 to 20 Ang
     # Preprocessing

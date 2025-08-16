@@ -115,6 +115,12 @@ def check_modes_ortho(tensor, atol = 2e-4):
     # Therefore, instead of torch.dot(a,a), which would output un-intended result when a is complex,
     # use torch.dot(a, a.conj()) for the correct inner product.
     
+    # Automatically convert numpy array to torch tensor
+    if isinstance(tensor, np.ndarray):
+        print("Casting input tensor from 'np.ndarray' to 'torch.tensor'")
+        tensor = torch.tensor(tensor)
+    tensor = tensor.to(dtype=torch.complex128)
+    
     print(f"Input tensor has shape {tensor.shape} and dtype {tensor.dtype}")
     for i in range(tensor.shape[0]):
         for j in range(i + 1, tensor.shape[0]):
