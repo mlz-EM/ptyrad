@@ -469,6 +469,14 @@ class InitParams(BaseModel):
     Randomize the initial guess of scan positions with Gaussian distributed displacement (std in px) to reduce raster grid pathology
     """
 
+    obj_z_crop: Optional[List[int]] = Field(default=None, description="Cropping object along depth dimension")
+    """
+    type: null or list of 2 ints as [z_start, z_end]. 
+    This applies additional cropping to the 4D object (omode, Nz, Ny, Nx) along depth dimension and removes the unselected layers. 
+    This is useful for removing the unwanted vacuum layers above and below the specimen. 
+    The syntax follows conventional numpy indexing so the upper bound is not included.
+    """
+
     # Input source and params
     meas_source: Literal['file', 'custom'] = Field(default="file", description="Data source for measurements")
     """
@@ -623,6 +631,21 @@ class InitParams(BaseModel):
         """Ensure pos_scan_affine is None or a list of 4 floats."""
         if v is not None and (len(v) != 4 or not all(isinstance(x, (int, float)) for x in v)):
             raise ValueError("pos_scan_affine must be None or a list of 4 floats")
+        return v
+    
+    @field_validator("obj_z_crop")
+    @classmethod
+    def validate_obj_z_crop(cls, v: Optional[List[int]]) -> Optional[List[int]]:
+        """Ensure obj_z_crop is None or a list of 2 ints."""
+        if v is not None:
+            if not isinstance(v, list):
+                raise TypeError("obj_z_crop must be a list of two integers or None")
+            if len(v) != 2:
+                raise ValueError("obj_z_crop must have length 2")
+            if not all(isinstance(x, int) for x in v):
+                raise TypeError(f"obj_z_crop elements must be integers, got {[type(x) for x in v]}")
+            if v[0] >= v[1]:
+                raise ValueError(f"obj_z_crop must have z_start < z_end, got {v}")
         return v
         
     # 2025.07.02 CHL    

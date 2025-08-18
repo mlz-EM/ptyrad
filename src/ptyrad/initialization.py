@@ -1700,7 +1700,38 @@ class Initializer:
         # Note that these methods would need to update `init_params`` and then call `set_variables_dict`` for the `init_variables``
         omode_max = self.init_params.get('obj_omode_max')
 
+        obj = self._obj_z_crop(obj, self.init_params.get('obj_z_crop'))
         obj = self._object_set_omode_max(obj, omode_max)
+        
+        return obj
+    
+    def _obj_z_crop(self, obj, crop_range):
+        """
+        Crop 4D complex object (omode, Nz, Ny, Nx) across depth (Nz) dimension:
+        [z_start, z_end]
+        Note that this method would also update the `self.init_params['obj_Nlayer']`
+        """
+        
+        if crop_range is None:
+            return obj
+        
+        if len(crop_range) != 2:
+            raise ValueError(f"Expected crop range [z_start, z_end], got {crop_range}")
+        
+        try:
+            z_start, z_end = crop_range
+            selected_slices = slice(z_start, z_end)
+            vprint(f"Cropping object depth from z_start: {z_start} to z_end: {z_end}", verbose=self.verbose)
+        except Exception as e:
+            raise ValueError(f"Invalid crop range for object depth: {crop_range}, object shape is {obj.shape}") from e
+
+        vprint(f"Current object has shape (omode, Nz, Ny, Nx) = {obj.shape}", verbose=self.verbose)
+        
+        obj = obj[:,selected_slices,:,:]
+        vprint(f"Cropped object has shape (omode, Nz, Ny, Nx) = {obj.shape}", verbose=self.verbose)
+        
+        # Update init_params['obj_Nlayer]
+        self.init_params['obj_Nlayer'] = obj.shape[1]
         
         return obj
     
