@@ -426,6 +426,9 @@ def make_output_folder(
             scale = round(constraint_params["mirrored_amp"]["scale"], 2)
             power = round(constraint_params["mirrored_amp"]["power"], 2)
             parts.append(f"mamp{scale}_{power}")
+            
+        if constraint_params["obj_z_recenter"]["start_iter"] is not None:
+            parts.append("ozrec")
 
         if constraint_params["obja_thresh"]["start_iter"] is not None:
             parts.append(f"oathr{round(constraint_params['obja_thresh']['thresh'][0], 2)}")

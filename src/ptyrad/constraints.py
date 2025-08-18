@@ -8,7 +8,15 @@ from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
-from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, normalize_constraint_params, make_sigmoid_mask, vprint
+from ptyrad.utils import (
+    fftshift2,
+    gaussian_blur_1d,
+    ifftshift2,
+    make_sigmoid_mask,
+    near_field_evolution_torch,
+    normalize_constraint_params,
+    vprint,
+)
 
 
 @torch.compiler.disable # TorchRuntimeError: Dynamo failed to run FX node with fake tensors: call_function <Wrapped method <original sub>>(*(FakeTensor(..., size=(5,), dtype=torch.float64), 2.0), **{}): got AttributeError("'ndarray' object has no attribute 'sub'")
@@ -198,6 +206,40 @@ class CombinedConstraint(torch.nn.Module):
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_new))' if relax != 0 else 'hard'
             vprint(f"Apply {relax_str} mirrored amplitude constraint with scale = {scale} and power = {power} on obja at iter {niter}. obja range becomes ({amin:.3f}, {amax:.3f})", verbose=self.verbose)
     
+    def apply_obj_z_recenter(self, model, niter):
+        '''Apply object z-recentering along depth dimension '''
+        # The idea is to recenter the object within the object tensor using CoM along depth
+        # Because fundamentally there's an ambiguity between probe defocus and object z positioning,
+        # so we'll have to shift the object and adjust the probe accordingly.
+        # I thought I saw this idea in other packages but I couldn't seem to find it anymore......
+        
+        if self._should_apply_at_iter('obj_z_recenter', niter):
+            threshold = self.constraint_params['obj_z_recenter'].get('thresh', 90)
+            scale     = self.constraint_params['obj_z_recenter'].get('scale', 0.5)
+            max_shift = self.constraint_params['obj_z_recenter'].get('max_shift', 5)
+            unit_str = model.length_unit
+            dz = model.opt_slice_thickness.detach().item()
+            
+            probe = model.get_complex_probe_view()
+            dx = model.dx
+            lambd = model.lambd
+            obja = model.opt_obja
+            objp = model.opt_objp
+            objc = torch.polar(obja, objp)
+            
+            # Shift the obj along z 
+            z_shift = get_obj_z_shift(objp, threshold, scale, max_shift) # unit: px
+            objc = shift_obj_along_z(objc, z_shift)
+            
+            # Update model obj
+            model.opt_obja.data = torch.abs(objc).contiguous()
+            model.opt_objp.data = torch.angle(objc).contiguous()
+            
+            # Update model probe
+            H = near_field_evolution_torch(probe.shape[-2:], dx, z_shift*dz, lambd)
+            model.opt_probe.data = torch.view_as_real(ifft2(H[None,] * fft2(probe)).contiguous())
+            vprint(f"Apply obj z-recenter constraint. Complex object and probe defocus are shifted by {z_shift:.3f} slice ({(z_shift*dz):.3f} {unit_str}) along depth dimension. threshold = {threshold}, scale = {scale}, and max_shift = {max_shift}.", verbose=self.verbose)
+    
     def apply_obja_thresh(self, model, niter):
         ''' Apply thresholding on obja at voxel level '''
         # Although there's a lot of code repitition with `apply_postiv`, phase positivity itself is important enough as an individual operation
@@ -252,20 +294,21 @@ class CombinedConstraint(torch.nn.Module):
         
         with torch.no_grad():
             # Probe constraints
-            self.apply_ortho_pmode  (model, niter)
-            self.apply_probe_mask_k (model, niter)
-            self.apply_fix_probe_int(model, niter)
+            self.apply_ortho_pmode   (model, niter)
+            self.apply_probe_mask_k  (model, niter)
+            self.apply_fix_probe_int (model, niter)
             # Object constraints
-            self.apply_obj_rblur    (model, niter)
-            self.apply_obj_zblur    (model, niter)
-            self.apply_kr_filter    (model, niter)
-            self.apply_kz_filter    (model, niter)
-            self.apply_complex_ratio(model, niter)
-            self.apply_mirrored_amp (model, niter)
-            self.apply_obja_thresh  (model, niter)
-            self.apply_objp_postiv  (model, niter)
+            self.apply_obj_rblur     (model, niter)
+            self.apply_obj_zblur     (model, niter)
+            self.apply_kr_filter     (model, niter)
+            self.apply_kz_filter     (model, niter)
+            self.apply_complex_ratio (model, niter)
+            self.apply_mirrored_amp  (model, niter)
+            self.apply_obj_z_recenter(model, niter)
+            self.apply_obja_thresh   (model, niter)
+            self.apply_objp_postiv   (model, niter)
             # Local tilt constraint
-            self.apply_tilt_smooth  (model, niter)
+            self.apply_tilt_smooth   (model, niter)
 
 ###### Filter and helper functions for constraints ######
 def sort_by_mode_int(modes):
@@ -351,6 +394,73 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase')
         fobj = 1+0.9*(fobj-1) # This is essentially a soft obja threshold constraint built into the kz_filter routine for obja
         
     return fobj
+
+def get_obj_z_shift(obj_phase, threshold=95, scale=1, max_shift=10):
+    """
+    Compute z-shift from the center-of-mass (CoM) of the object phase.
+    
+    Args:
+        obj_phase: tensor (omode, z, y, x), phase values in radians
+        threshold: threshold factor used to remove weak intensities in the image
+        scale: scaling factor applied to the measured shift
+        max_shift: maximum allowed shift in pixels
+    
+    Returns:
+        float, signed shift (positive = shift down in z)
+    """
+
+    nz = obj_phase.shape[1]
+    if max_shift is None:
+        max_shift = (nz-1)/2
+    else:
+        max_shift = min(max_shift, (nz-1)/2)
+
+    # Ensure no negative phase value
+    obj_phase = torch.clamp(obj_phase, min=0)
+    
+    # Threshold to focus on actual signal
+    if threshold is not None:
+        cutoff = torch.quantile(obj_phase, q=threshold/100) # quantile is between [0,1]
+        obj_phase[obj_phase < cutoff] = 0 # Value smaller than cutoff is set to 0
+    
+    # Collapse omode,y,x → get mean phase per z-slice
+    phase_z = obj_phase.mean(dim=(0, 2, 3))  # shape (z,)
+    
+    # Calculate CoM and shift
+    z_coords = torch.arange(nz, device=obj_phase.device, dtype=obj_phase.dtype)
+    com_z = (z_coords * phase_z).sum() / (phase_z.sum() + 1e-8)
+    center_z = (nz - 1) / 2.0
+    shift = center_z - com_z
+    
+    # Apply scaling and clip
+    shift *= scale
+    shift = torch.clamp(shift, min=-max_shift, max=max_shift)
+    
+    return shift.item()
+
+def shift_obj_along_z(objc, z_shift):
+    """
+    Apply a subpixel shift along z using Fourier shift theorem.
+    
+    Args:
+        objc: tensor (omode, z, y, x), complex
+        z_shift: float, shift in pixels along +z direction
+    Returns:
+        shifted tensor, same shape
+    """
+    if abs(z_shift) < 1e-3:
+        return objc
+    
+    nz = objc.shape[1]
+    freq_z = torch.fft.fftfreq(nz, d=1.0, device=objc.device)  # cycles/pixel
+    phase_ramp = torch.exp(-2j * torch.pi * freq_z * z_shift)  # (nz,)
+    
+    # FFT along z only
+    obj_f = torch.fft.fft(objc, dim=1)
+    obj_f = obj_f * phase_ramp[None, :, None, None]
+    obj_shifted = torch.fft.ifft(obj_f, dim=1)
+    
+    return obj_shifted
 
 def complex_ratio_constraint(model, alpha1, alpha2):
     # https://doi.org/10.1016/j.ultramic.2024.114068

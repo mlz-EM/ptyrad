@@ -95,6 +95,15 @@ class MirroredAmp(BaseModel):
     scale: float = Field(default=0.03, ge=0.0, description="Scale parameter for amplitude constraint")
     power: float = Field(default=4.0, ge=0.0, description="Power parameter for amplitude constraint")
 
+class ObjZRecenter(BaseModel):
+    model_config = {"extra": "forbid"}
+    
+    start_iter: Optional[int] = Field(default=None, ge=1, description="Start iteration of applying obj Z recneter constraint")
+    step: Optional[int] = Field(default=1, ge=1, description="Interval of iterations of applying obj Z recneter constraint")
+    end_iter: Optional[int] = Field(default=None, ge=1, description="End iteration of applying obj Z recneter constraint")
+    thresh: Optional[float] = Field(default=95, ge=0, le=100, description="Percentile for image thresholding")
+    scale: Optional[float] = Field(default=1, ge=0.0, le=1.0, description="Scale parameter for measured shift")
+    max_shift: Optional[float] = Field(default=10, ge=0.0, description="Maximum value for applied shift")
 
 class ObjaThresh(BaseModel):
     model_config = {"extra": "forbid"}
@@ -250,6 +259,19 @@ class ConstraintParams(BaseModel):
     """
     Apply a more flexible, ad hoc constraint for constraining amplitude using 1-scale*phase**power, 
     which provide more arbitrary parameters to tune the constrained amplitude based on the phase.
+    """
+    
+    obj_z_recenter: ObjZRecenter = Field(
+        default_factory=ObjZRecenter, description="Obj Z recenter constraint"
+    )
+    """
+    Apply the z-recentering of object based on CoM to keep the object centered within the depth dimension. 
+    The probe defocus is adjusted accordingly. 
+    thresh is the threshold value in percentile to exclude weaker signals while calculating center-of-mass along depth. 
+    The value of thresh should be around 90-95 to target values that are 2-3 sigma away from mean. 
+    scale is a multplication scaling factor applied on the measured shift, keep it <= 1 to slowly approach the ideal center. 
+    max_shift sets a hard limit on the applied shift, which should be less than half the number of z-slices. 
+    The shift is in unit of slices, so shift=1 would re-center the object by 1 slice.
     """
     
     obja_thresh: ObjaThresh = Field(

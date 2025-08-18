@@ -6,6 +6,7 @@ Physics-related functions of probes, propagators, and constants, etc.
 from typing import Optional
 
 import numpy as np
+import torch
 
 from .common import vprint
 
@@ -535,3 +536,22 @@ def near_field_evolution(Npix_shape, dx, dz, lambd):
     H = np.fft.ifftshift(np.exp(1j * dz * np.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
 
     return H
+
+def near_field_evolution_torch(Npix_shape, dx, dz, lambd, dtype=torch.complex64, device='cuda'):
+    """ Fresnel propagator """
+    # Translated and simplified from Yi's fold_slice Matlab implementation into PyTorch by Chia-Hao Lee
+    # This is currently only used in 'obj_z_recenter' constraint to shift the probe defocus.
+    # The forward pass uses the propagator direcly constructed in `PtychoAD.get_propagators`` for efficiency.
+    from ptyrad.utils import ifftshift2
+
+    ygrid = (torch.arange(-Npix_shape[0] // 2, Npix_shape[0] // 2, device=device) + 0.5) / Npix_shape[0]
+    xgrid = (torch.arange(-Npix_shape[1] // 2, Npix_shape[1] // 2, device=device) + 0.5) / Npix_shape[1]
+
+    # Standard ASM
+    k  = 2 * torch.pi / lambd
+    ky = 2 * torch.pi * ygrid / dx
+    kx = 2 * torch.pi * xgrid / dx
+    Ky, Kx = torch.meshgrid(ky, kx, indexing="ij")
+    H = ifftshift2(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2)), ) # H has zero frequency at the corner in k-space
+
+    return H.to(dtype)

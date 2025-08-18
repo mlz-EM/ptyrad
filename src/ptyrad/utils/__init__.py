@@ -70,6 +70,7 @@ from .physics import (  # noqa: F401
     make_mixed_probe,
     make_stem_probe,
     near_field_evolution,
+    near_field_evolution_torch,
     orthogonalize_modes_vec_np,
     sort_by_mode_int_np,
 )
