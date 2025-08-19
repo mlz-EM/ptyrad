@@ -1701,6 +1701,7 @@ class Initializer:
         omode_max = self.init_params.get('obj_omode_max')
 
         obj = self._obj_z_crop(obj, self.init_params.get('obj_z_crop'))
+        obj = self._obj_z_pad(obj, self.init_params.get('obj_z_pad'))
         obj = self._object_set_omode_max(obj, omode_max)
         
         return obj
@@ -1729,6 +1730,70 @@ class Initializer:
         
         obj = obj[:,selected_slices,:,:]
         vprint(f"Cropped object has shape (omode, Nz, Ny, Nx) = {obj.shape}", verbose=self.verbose)
+        
+        # Update init_params['obj_Nlayer]
+        self.init_params['obj_Nlayer'] = obj.shape[1]
+        
+        return obj
+    
+    def _obj_z_pad(self, obj, pad_cfg):
+        """
+        Pad 4D complex object (omode, Nz, Ny, Nx) along the depth (Nz) dimension.
+        Note that this method would also update the `self.init_params['obj_Nlayer']`
+        """
+        
+        if pad_cfg is None:
+            return obj
+        
+        pad_layers = pad_cfg['pad_layers']
+        pad_types  = pad_cfg['pad_types']
+
+        vprint(f"Current object has shape (omode, Nz, Ny, Nx) = {obj.shape}", verbose=self.verbose)
+        vprint(f"Padding object along depth with pad_layers = {pad_layers}, pad_types = {pad_types}", verbose=self.verbose)
+
+        # Assign variables
+        pad_layer_top, pad_layer_bottom = pad_layers
+        pad_type_top, pad_type_bottom = pad_types
+        
+        # Helper function
+        def _create_z_pad(obj, num_layers, pad_type, top_or_bottom):
+            obja = np.abs(obj)
+            objp = np.angle(obj)
+            omode, nz, ny, nx = obj.shape
+
+            # Return an empty array with the same shape as obj but with nz = 0
+            if num_layers is None or num_layers == 0:
+                return np.empty((omode, 0, ny, nx), dtype=obj.dtype)
+            
+            # Create new layers
+            else:
+                new_shape = (omode, num_layers, ny, nx)
+                
+                if pad_type == 'vacuum':
+                    new_layers_a = np.ones(new_shape)
+                    new_layers_p = np.zeros(new_shape)
+                elif pad_type == 'mean':
+                    new_layers_a = np.mean(obja, axis=1, keepdims=True) # The variance of amplitude along depth is usually quite small so geometric mean ~= arithmetric mean, although it might feel more natural to use geometric mean.
+                    new_layers_p = np.mean(objp, axis=1, keepdims=True) # Note that this could be a bit biased if phase is not positively constrained. The shape is (omode, 1, Ny, Nx).
+                elif pad_type == 'edge':
+                    if top_or_bottom == 'top':
+                        edge_idx = [0] # Wrap it with [] to preserve the dimension 
+                    elif top_or_bottom == 'bottom':
+                        edge_idx = [-1]
+                    else:
+                        raise ValueError(f"top_or_bottom expects 'top', or 'bottom', got {top_or_bottom}.")
+                    new_layers_a = obja[:, edge_idx] # (omode, 1, Ny, Nx)
+                    new_layers_p = objp[:, edge_idx]
+                else:
+                     raise ValueError(f"Unsupported pad_type: {pad_type}, please use 'vacuum', 'mean', or 'edge'.")
+                
+                new_layers = new_layers_a * np.exp(1j * new_layers_p)
+                return np.broadcast_to(new_layers, new_shape).copy().astype(obj.dtype)
+        
+        top_layers    = _create_z_pad(obj, num_layers=pad_layer_top,    pad_type=pad_type_top,    top_or_bottom='top')
+        bottom_layers = _create_z_pad(obj, num_layers=pad_layer_bottom, pad_type=pad_type_bottom, top_or_bottom='bottom')
+        obj = np.concatenate((top_layers, obj, bottom_layers), axis=1)
+        vprint(f"Padded object has shape (omode, Nz, Ny, Nx) = {obj.shape}", verbose=self.verbose)
         
         # Update init_params['obj_Nlayer]
         self.init_params['obj_Nlayer'] = obj.shape[1]

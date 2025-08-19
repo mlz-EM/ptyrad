@@ -110,6 +110,20 @@ class MeasExport(BaseModel):
     append_shape: bool = Field(default=True, description="Whether to append the shape at the end of the exported file name")
 
 
+class ObjZPad(BaseModel):
+    model_config = {"extra": "forbid"}
+    
+    pad_layers: List[Optional[int]] = Field(default=[0,0], min_length=2, max_length=2, description="Number of layers to pad on object's top and bottom surfaces. List of 2 ints.")
+    pad_types: List[Literal['vacuum', 'mean', 'edge']] = Field(default=['vacuum', 'vacuum'], min_length=2, max_length=2, description="Type of layers to pad on object's top and bottom surfaces. List of 2 strings of 'vacuum', 'mean', 'edge")
+    
+    @field_validator("pad_layers")
+    @classmethod
+    def validate_pad_layers(cls, v):
+        if not all(x is None or x >= 0 for x in v):
+            raise ValueError("pad_layers must contain non-negative integers or None")
+        return v
+
+
 class TiltParams(BaseModel):
     model_config = {"extra": "forbid"}
     
@@ -475,6 +489,23 @@ class InitParams(BaseModel):
     This applies additional cropping to the 4D object (omode, Nz, Ny, Nx) along depth dimension and removes the unselected layers. 
     This is useful for removing the unwanted vacuum layers above and below the specimen. 
     The syntax follows conventional numpy indexing so the upper bound is not included.
+    """
+    
+    obj_z_pad: Optional[ObjZPad] = Field(default=None, description="Padding object along depth dimension")
+    """
+    type: null or dict, i.e., {'pad_layers': [2,2], 'pad_types': ['vacuum', 'vacuum']}. 
+    This applies additional padding to the 4D object (omode, Nz, Ny, Nx) along depth dimension (Nz) and expands the object thickness. 
+    'pad_layers' is a list of 2 ints that determines how many layers are appended to the top and bottom surfaces. 
+    [2,2] means 2 layers on top and 2 layers on the bottom. 
+    Set the value to 0 or None to achieve asymmetric padding on one of the surface. 
+    For example 'pad_layers': [0,5] means to only pad 5 layers to the bottom. 
+    'pad_types' is a list of 2 strings that specifies whether we are padding vacuum layers, mean layers, or edge layers. 
+    The available options are 'vacuum', 'mean', and 'edge'. 
+    This is useful for expanding reconstructed object to test object positioning or total thickness. 
+    Note that one should also adjust the 'probe_add_df' (loaded probe) or 'probe_defocus' (simulated probe) accordingly, 
+    because padding object on the top surface will effectively change the entrance plane of the probe. 
+    For example, if one padded 10 nm of vacuum on the top surface, 
+    one should also add a 10 nm underfocus to maintain the relative position of probe and object.
     """
 
     # Input source and params
