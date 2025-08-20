@@ -496,7 +496,9 @@ def make_output_folder(
     if "affine" in recon_dir_affixes:
         scan_affine = model.scan_affine  # Note that scan_affine could be None
         if scan_affine is not None and not np.allclose(scan_affine, [1, 0, 0, 0]):
-            affine_str = "aff" + "_".join(f"{x:.2g}" for x in scan_affine)  # (4,)
+            formats = [".2f", ".2f", ".1f", ".1f"]  # customize per index
+            formatted = [format(x, fmt) for x, fmt in zip(scan_affine, formats)]
+            affine_str = "aff" + "_".join(formatted)  # (4,)
             parts.append(f"{affine_str}")
 
     # Attach init tilts (optional)
