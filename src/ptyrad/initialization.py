@@ -18,6 +18,7 @@ from scipy.ndimage import gaussian_filter, zoom
 from ptyrad.load import load_array_from_file, load_hdf5, load_mat, load_ptyrad
 from ptyrad.save import save_array
 from ptyrad.utils import (
+    complex_object_z_resample_torch,
     compose_affine_matrix,
     create_one_hot_mask,
     exponential_decay,
@@ -1390,7 +1391,7 @@ class Initializer:
         Note that df is the same convention with PtychoShelves/fold_slice and abTEM with the Kirkland convention, where positive defocus is underfocus.
         """
         
-        if df is None or df != 0:
+        if df is None or df == 0:
             return probe
 
         else:
@@ -1398,7 +1399,7 @@ class Initializer:
             lambd = self.init_variables['lambd']
             unit_str = self.init_variables['length_unit']
             
-            vprint(f"Adding additional probe defocus = {df} {unit_str}", verbose=self.verbose)
+            vprint(f"Adding additional probe defocus = {df} {unit_str}. Positive value means underfocus.", verbose=self.verbose)
             H = near_field_evolution(probe.shape[-2:], dx, df, lambd)
             probe_shifted = np.fft.ifft2(H[None,] * np.fft.fft2(probe))
             return probe_shifted
@@ -1695,13 +1696,14 @@ class Initializer:
         return obj
     
     def _process_obj(self, obj):
-        
-        # TODO: Add resampling, padding, for multislice obj
-        # Note that these methods would need to update `init_params`` and then call `set_variables_dict`` for the `init_variables``
+        """
+        Process the loaded object, including z cropping, padding, resampling, and setting omode
+        """
         omode_max = self.init_params.get('obj_omode_max')
 
         obj = self._obj_z_crop(obj, self.init_params.get('obj_z_crop'))
         obj = self._obj_z_pad(obj, self.init_params.get('obj_z_pad'))
+        obj = self._obj_z_resample(obj, self.init_params.get('obj_z_resample'))
         obj = self._object_set_omode_max(obj, omode_max)
         
         return obj
@@ -1799,6 +1801,52 @@ class Initializer:
         self.init_params['obj_Nlayer'] = obj.shape[1]
         
         return obj
+
+    def _obj_z_resample(self, obj, resample_cfg):
+        """
+        Resample 4D complex object (omode, Nz, Ny, Nx) along the depth (Nz) dimension.
+        Note that this method would also update the `self.init_params['obj_Nlayer']`, 
+        `self.init_params['obj_slice_thickness']`, and `self.init_variables['slice_thickness']`
+        This is currently (v0.1.0b11) the only function in Initializer that uses PyTorch because the scipy.ndimage.zoom is just too slow...
+        """
+        
+        if resample_cfg is None or resample_cfg['mode'] is None:
+            return obj
+        
+        # Assign variables
+        resample_mode = resample_cfg['mode']
+        resample_value = resample_cfg['value']
+        Nz_now = obj.shape[1]
+        dz_now = self.init_variables['slice_thickness'] # This was set by `set_variables_dict` using values in `init_params['obj_slice_thickness]`
+        length_unit = self.init_variables['length_unit']
+        
+        # Print current status
+        vprint(f"Current object has shape (omode, Nz, Ny, Nx) = {(obj.shape)}", verbose=self.verbose)
+        vprint(f"Current object has slice thickness = {dz_now:.3f} {length_unit}", verbose=self.verbose)
+        vprint(f"Current object has mean(prod(amp, axis='depth')) = {np.mean(np.prod(np.abs(obj), axis=1)):.3f}, mean(sum(phase, axis='depth')) = {np.mean(np.sum(np.angle(obj), axis=1)):.3g}", verbose=self.verbose)
+        vprint(f"Resampling object along depth with resampling mode = '{resample_mode}', value = {resample_value}", verbose=self.verbose)
+        
+        # Get resampled object and infer new slice thickness
+        obja_resample, objp_resample = complex_object_z_resample_torch(obj, dz_now, resample_mode, resample_value, output_type='amp_phase', return_np=True) # Output amplitude and phase separately so we can check the phase value directly
+        obj_resample = obja_resample * np.exp(1j * objp_resample) # (omode, Nz, Ny, Nx)
+        Nz_new = obj_resample.shape[1]
+        dz_new = dz_now * Nz_now / Nz_new
+        
+        # Print warning if there's phase wrapping
+        if objp_resample.max() > 2*np.pi:
+            vprint(f"Warning: Resampled object phase has a maximum value = {objp_resample.max():.3f} > 2pi, this would cause phase wrapping, try using thinner slices.")
+        
+        # Update Nlayer and slice thickness
+        self.init_params['obj_Nlayer'] = obj_resample.shape[1]
+        self.init_params['obj_slice_thickness'] = dz_new
+        self.init_variables['slice_thickness'] = dz_new
+        
+        # Print final status
+        vprint(f"Resampled object has shape (omode, Nz, Ny, Nx) = {(obj_resample.shape)}", verbose=self.verbose)
+        vprint(f"Resampled object has slice thickness = {dz_new:.3f} {length_unit}", verbose=self.verbose)
+        vprint(f"Resampled object has mean(prod(amp, axis='depth')) = {np.mean(np.prod(np.abs(obj_resample), axis=1)):.3f}, mean(sum(phase, axis='depth')) = {np.mean(np.sum(np.angle(obj_resample), axis=1)):.3g}", verbose=self.verbose)
+        
+        return obj_resample
     
     def _object_set_omode_max(self, obj, omode_max):
         """

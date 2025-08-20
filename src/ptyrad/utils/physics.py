@@ -3,7 +3,7 @@ Physics-related functions of probes, propagators, and constants, etc.
 
 """
 
-from typing import Optional
+from typing import Literal, Optional, Union
 
 import numpy as np
 import torch
@@ -169,6 +169,169 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         complex_object_interp3d = obj_a_interp * xp.exp(obj_p_interp*1j)
         print(f"The object shape is interpolated to {complex_object_interp3d.shape}.")
         return complex_object_interp3d.astype(obj_dtype)
+
+def complex_object_z_resample_torch(obj: Union[torch.Tensor, np.ndarray], 
+                                    dz_now: float, 
+                                    resample_mode: Literal['scale_Nlayer', 'scale_slice_thickness', 'target_Nlayer', 'target_slice_thickness'], 
+                                    resample_value: Union[float, int], 
+                                    output_type: Optional[Literal['complex', 'amplitude', 'phase', 'amp_phase']] = 'complex', 
+                                    return_np: bool = True):
+    """Resample a complex 3D object along the depth (z) axis while conserving
+    amplitude product, phase sum, and total thickness.
+
+    This function performs interpolation along the z-axis of a complex-valued
+    object using PyTorch. The object is decomposed into amplitude and phase,
+    resampled with conservation laws applied, and recombined into the desired
+    output representation.
+
+    Args:
+        obj (ndarray or torch.Tensor): Input complex object with shape
+            (..., Nz, Ny, Nx). Can be a NumPy array or a torch.Tensor.
+        dz_now (float): Current slice thickness along the z-axis.
+        resample_mode (str): Resampling mode for the depth axis. Must be one of:
+            - "scale_Nlayer": Scale the number of layers by a float factor.
+            - "scale_slice_thickness": Scale slice thickness by a float factor.
+            - "target_Nlayer": Resample to a target integer number of layers.
+            - "target_slice_thickness": Resample to a target slice thickness.
+        resample_value (int or float): Parameter value for the resampling mode.
+            - Positive float for "scale_Nlayer" or "scale_slice_thickness".
+            - Positive integer (>=1) for "target_Nlayer".
+            - Positive float for "target_slice_thickness".
+        output_type (str, optional): Output representation. Must be one of:
+            - "complex": Return recombined complex object (default).
+            - "amplitude": Return amplitude only.
+            - "phase": Return phase only.
+            - "amp_phase": Return tuple (amplitude, phase).
+        return_np (bool, optional): If True (default), convert outputs to NumPy
+            arrays. If False, return PyTorch tensors.
+
+    Returns:
+        ndarray or torch.Tensor or tuple:
+            The resampled object in the requested representation:
+            - Complex ndarray/tensor if output_type == "complex".
+            - Real ndarray/tensor if output_type == "amplitude" or "phase".
+            - Tuple of (amplitude, phase) if output_type == "amp_phase".
+
+            Type depends on `return_np`.
+
+    Raises:
+        ValueError: If `resample_mode` is invalid.
+        ValueError: If the target number of layers is less than 1.
+        ValueError: If the input object has unsupported dimensionality.
+        ValueError: If `output_type` is not one of the allowed options.
+
+    Examples:
+        Resample by doubling the number of z-layers:
+
+        >>> out = complex_object_z_resample_torch(
+        ...     obj, dz_now=0.5, resample_mode="scale_Nlayer",
+        ...     resample_value=2.0, output_type="complex"
+        ... )
+        >>> out.shape
+
+        Resample to a target of 64 layers, keeping total thickness fixed:
+
+        >>> out_amp, out_phase = complex_object_z_resample_torch(
+        ...     obj, dz_now=0.5, resample_mode="target_Nlayer",
+        ...     resample_value=64, output_type="amp_phase"
+        ... )
+    """
+    import torch
+    from torch.nn.functional import interpolate
+    
+    # Assign variables
+    Nz_now, Ny_now, Nx_now = obj.shape[-3:]
+    
+    # Setup resampling modes and scaling constants
+    if resample_mode == 'scale_Nlayer':
+        scale_factors = [resample_value, 1, 1]
+        sizes = None
+        Nz_scale = resample_value
+        
+    elif resample_mode == 'scale_slice_thickness':
+        scale_factors = [1/resample_value, 1, 1]
+        sizes = None
+        Nz_scale = 1/resample_value
+        
+    elif resample_mode == 'target_Nlayer':
+        scale_factors = None
+        sizes = [int(resample_value), Ny_now, Nx_now]
+        Nz_scale = resample_value/Nz_now
+        
+    elif resample_mode == 'target_slice_thickness':
+        scale_factors = [dz_now/resample_value, 1, 1]
+        sizes = None
+        Nz_scale = dz_now/resample_value
+        
+    else:
+        raise ValueError(f"Supported obj_z_resample modes are 'scale_Nlayer', 'scale_slice_thickness', 'target_Nlayer', and 'target_slice_thickness', got {resample_mode}.")
+    
+    # Check scale factor validity
+    if Nz_now * Nz_scale < 1:
+        raise ValueError(f"Detected target Nlayer = {Nz_now * Nz_scale:.3f} < 1 (single slice), please check your 'obj_z_resampling' settings.")
+    
+    # Preprocess obj into torch tensor
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if not isinstance(obj, torch.Tensor):
+        obj_tensor = torch.tensor(obj, dtype=torch.complex64, device=device)
+    else:
+        obj_tensor = obj.to(dtype=torch.complex64, device=device)
+    
+    # Make it into 5D (1,omode,Nz,Ny,Nx) for 3D interpolation
+    if obj_tensor.ndim == 3:
+        orig_ndim = 3
+        obj_tensor = obj_tensor.unsqueeze(0).unsqueeze(0)
+    elif obj_tensor.ndim == 4:
+        orig_ndim = 4
+        obj_tensor = obj_tensor.unsqueeze(0)
+    elif obj_tensor.ndim == 5:
+        orig_ndim = 5
+    else:
+        raise ValueError(f"Complex object 3D interpolation only supports 3, 4, 5D tensor, got {obj_tensor.ndim}.")
+    
+    # Split into amplitude and phase parts
+    obja = torch.abs(obj_tensor)
+    objp = torch.angle(obj_tensor)
+    
+    # Apply resampling with proper value scaling to conserve prod(amp, axis='depth'), sum(phase, axis='depth'), and total thickness
+    obja_resample = torch.exp(interpolate(torch.log(obja), size=sizes, scale_factor=scale_factors, mode='area') / Nz_scale)
+    objp_resample = interpolate(objp, size=sizes, scale_factor=scale_factors, mode='area') / Nz_scale
+    
+    # Handle outputs
+    if output_type == 'complex':
+        out = torch.polar(obja_resample, objp_resample)
+    elif output_type == 'amplitude':
+        out = obja_resample
+    elif output_type == 'phase':
+        out = objp_resample
+    elif output_type == 'amp_phase':
+        out = (obja_resample, objp_resample)
+    else:
+        raise ValueError(
+            f"output_type must be one of 'complex', 'amplitude', 'phase', 'amp_phase', "
+            f"got {output_type}"
+        )
+
+    # Reduce back to original ndim
+    if orig_ndim == 3:
+        if isinstance(out, tuple):
+            out = tuple(o.squeeze(0).squeeze(0) for o in out)
+        else:
+            out = out.squeeze(0).squeeze(0)
+    elif orig_ndim == 4:
+        if isinstance(out, tuple):
+            out = tuple(o.squeeze(0) for o in out)
+        else:
+            out = out.squeeze(0)
+
+    # Convert to numpy if requested
+    if return_np:
+        if isinstance(out, tuple):
+            out = tuple(o.detach().cpu().numpy() for o in out)
+        else:
+            out = out.detach().cpu().numpy()
+
+    return out
 
 # Initialize probes
 def get_default_probe_simu_params(init_params):

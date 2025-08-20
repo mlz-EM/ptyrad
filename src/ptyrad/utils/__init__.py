@@ -63,6 +63,7 @@ from .math_ops import (  # noqa: F401
     torch_phasor,
 )
 from .physics import (  # noqa: F401
+    complex_object_z_resample_torch,
     get_default_probe_simu_params,
     get_EM_constants,
     infer_dx_from_params,

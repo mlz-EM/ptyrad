@@ -124,6 +124,40 @@ class ObjZPad(BaseModel):
         return v
 
 
+class ObjZResample(BaseModel):
+    model_config = {"extra": "forbid"}
+    
+    mode: Literal['scale_Nlayer', 'scale_slice_thickness', 'target_Nlayer', 'target_slice_thickness'] = Field(description="Resampling mode for object depth. Available options are 'scale_Nlayer', 'scale_slice_thickness', 'target_Nlayer', 'target_slice_thickness'.")
+    value: Union[int, float] = Field(description="Corresponding values for the specified resampling mode for object depth.")
+
+    @model_validator(mode="after")
+    def validate_value(cls, values):
+        mode = values.mode
+        value = values.value
+
+        if mode in ("scale_Nlayer", "scale_slice_thickness"):
+            if not isinstance(value, (int, float)):
+                raise ValueError(f"For mode '{mode}', value must be a float > 0.")
+            if value <= 0:
+                raise ValueError(f"For mode '{mode}', value must be > 0.")
+            # force float if int was passed
+            values.value = float(value)
+
+        elif mode == "target_Nlayer":
+            if not isinstance(value, int):
+                raise ValueError("For mode 'target_Nlayer', value must be an integer >= 1.")
+            if value < 1:
+                raise ValueError("For mode 'target_Nlayer', value must be >= 1.")
+
+        elif mode == "target_slice_thickness":
+            if not isinstance(value, (int, float)):
+                raise ValueError("For mode 'target_slice_thickness', value must be a float > 0.")
+            if value <= 0:
+                raise ValueError("For mode 'target_slice_thickness', value must be > 0.")
+            values.value = float(value)
+
+        return values
+
 class TiltParams(BaseModel):
     model_config = {"extra": "forbid"}
     
@@ -508,6 +542,17 @@ class InitParams(BaseModel):
     one should also add a 10 nm underfocus to maintain the relative position of probe and object.
     """
 
+    obj_z_resample: Optional[ObjZResample] = Field(default=None, description="Resampling object along depth dimension")
+    """
+    type: null or dict, i.e., {'mode': 'scale_Nlayer', 'value': 2}. 
+    This applies additional resampling to the 4D object (omode, Nz, Ny, Nx) along depth dimension (Nz), 
+    and modifies the slice thickness altogether to preserve prod(amp), sum(phase), and total thickness. 
+    'mode' can take string options including 'scale_Nlayer', 'scale_slice_thickness', 'target_Nlayer', 'target_slice_thickness', or null to disable it. 
+    'value' takes the corresponding value with the specified mode. 
+    The values for 'scale_Nlayer', 'scale_slice_thickness', and 'target_slice_thickness' can be any positive float, while 'target_Nlayer' must take a positive integer. 
+    This is useful when we need to reslice the reconstructed object into different slice thicknesses including converting between single and multislice objects.
+    """
+    
     # Input source and params
     meas_source: Literal['file', 'custom'] = Field(default="file", description="Data source for measurements")
     """
