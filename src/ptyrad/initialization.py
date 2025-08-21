@@ -233,6 +233,17 @@ class Initializer:
             if illum_type == 'electron':
                 vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF * 2 / target_Npix):.4f}", verbose=self.verbose)
 
+        # Handle additional change to fitRBF if there's meas_resample
+        resample_cfg = self.init_params.get('meas_resample')
+        if resample_cfg is not None and resample_cfg.get('mode') is not None:
+            mode = resample_cfg['mode'] # 'precompute' or 'on_the_fly'
+            scale_factors = resample_cfg['scale_factors']
+            fitRBF_modified = fitRBF * scale_factors[0] # Currently the 2 values need to be the same
+            final_Npix = self.init_params['meas_Npix']
+            vprint(f"Update fitRBF to {fitRBF_modified:.4f} due to meas_resample (mode = {mode}, scale_factors = {scale_factors}), Npix = {final_Npix}", verbose=self.verbose)
+            if illum_type == 'electron':
+                vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF_modified * 2 / final_Npix):.4f}", verbose=self.verbose)
+                    
         # Set the final dx for internal calibration, this dx would be used for probe, pos, object_extent, H
         self.init_params['probe_dx'] = dx
         vprint(" ", verbose=self.verbose)
