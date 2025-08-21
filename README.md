@@ -1,8 +1,8 @@
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
 ![PyPI - Version](https://img.shields.io/pypi/v/ptyrad)
+[![PyPI Downloads](https://static.pepy.tech/badge/ptyrad)](https://pepy.tech/projects/ptyrad)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/version.svg)](https://anaconda.org/conda-forge/ptyrad)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/latest_release_date.svg)](https://anaconda.org/conda-forge/ptyrad)
-[![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/downloads.svg)](https://anaconda.org/conda-forge/ptyrad)
 [![arXiv](https://img.shields.io/badge/arXiv-2505.07814-b31b1b.svg)](https://arxiv.org/abs/2505.07814)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15392805.svg)](https://doi.org/10.5281/zenodo.15392805)
 
@@ -12,7 +12,7 @@
 | [**Paper**](https://arxiv.org/abs/2505.07814)
 | [**Youtube**](https://www.youtube.com/@ptyrad_official)
 
-*PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [arXiv paper](https://arxiv.org/abs/2505.07814) and the [Zenodo record](https://doi.org/10.5281/zenodo.15273176) for more information and demo datasets.
+*PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [Microscopy and Microanalysis paper](https://academic.oup.com/mam/article/doi/10.1093/mam/ozaf070/8222545?utm_source=authortollfreelink&utm_campaign=mam&utm_medium=email&guestAccessKey=e9e13516-273a-4e46-bec4-7488e9001d7d) and the [Zenodo record](https://doi.org/10.5281/zenodo.15273176) for more information and demo datasets.
 
 ## Features
 - Gradient descent algorithms (Adam, SGD, LBFGS, etc.)
@@ -23,7 +23,7 @@
 - Streamlined preprocessing of cropping, padding, resampling, adding noises, and many more
 - Hyperparameter tuning
 - Multi-GPU reconstructions
-- JIT compilation with torch.compile
+- JIT compilation with `torch.compile`
 
 ## Recommended Tools
 We recommend using [*Miniforge*](https://github.com/conda-forge/miniforge) for Python environment management, and  

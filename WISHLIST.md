@@ -1,7 +1,7 @@
 # New Features and Enhancements
 
 
-Last Update: 2025.07.08
+Last Update: 2025.08.21
 
 ---
 
@@ -11,8 +11,6 @@ Last Update: 2025.07.08
 
 ### Overall workflows
 
-- Apply torch.compile (WIP) for speedup 
-- Add a random seed to PtyRAD for better reproducibility
 - Add better error messages.
 - Add pyramidal approaches
     - Similar to `asize.presolve` from PtyShv to initialize from rough object with coarse sampling
@@ -21,9 +19,7 @@ Last Update: 2025.07.08
 
 ### Initialization
 
-- Add padding and resampling to loaded objects and probes
-- Add preprocess step to expand single omode to multi object mode
-- Add preprocess step for loaded probe focus rolling (use it with multislice object initialization)
+- Add padding and resampling to loaded object, probe, and position altogether as `recon_resampling`
 - Add object initialization methods
     - [autocorrelation](https://doi.org/10.1364/OPTICA.522380)
     - Wirtinger Flow spectral method
@@ -39,7 +35,6 @@ Last Update: 2025.07.08
 
 ### Models
 
-- Allow all AD optimizable params and constraints to have `start_iter`, `end_iter`, and `step` parameters.
 - Revisit the `Npix-simu` branch about allowing forward model to generate diffraction patterns with larger kMax than the actual data. We can either center-crop the forward diffraction pattern before calculating the loss, or add a mask to exclude gradients from the additional region.
     - This would require the object and probe to be initialized at higher real space sampling than the data kMax, but it will allow the forward model to properly scatter outside of the collected region on the detector, hence reduce the edge artifact. This is a better approach than padding the experimental diffraction pattern.
     - Although early attempts seem to suggest the extra k region were not constraint by data at all so it creates weird artifact in the k-space probe. Would need to regularize probe to supress that.

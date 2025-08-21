@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b11] - 2025-08-21
+### Added
+- Add `obj_z_resample` preprocessing to `init_params` so we can reslice the object along depth dimension to adjust the slice thickness without changing total thickness. This is useful for refining an existing multislice restruction with finer slices as mentioned in issue #5, or to convert between single <-> multislice object
+- Add `obj_z_pad` preprocessing to `init_params` so we can pad more depth slices with 'vacuum', 'mean', or 'edge' options. This is useful for re-centering or expanding the loaded/initialized object along depth as mentioned in issue #5, or to quickly experiment the total thickness.
+- Add `obj_z_crop` preprocessing to `init_params` so we can remove unwanted depth slices. This is useful for re-centering the loaded/initialized object along depth as mentioned in issue #5
+- Add `obj_z_recenter` constraint to keep the multislice object centered within depth by measuring object CoM and adjusting probe defocus accordingly. This is useful when there're vacuum region around the object. This is in response to issue #5 suggested by @HanHsuanWu.
+- Add `probe_add_df` to `init_params` so we can adjust defocus of loaded probe, which could help the multislice object z-recentering; Add `add_df` as new hypertunable params to sweep additional defocus of loaded probe; Add `probe_add_df` to the illumination preset of `recon_dir_affixes` for folder name
+- Enable `probe_pmode_max` and `obj_omode_max` to automatically pad the mixed states if the loaded probe/object has fewer modes than the specified number of modes as suggested by @Xinyan-Li; Add numpy version of `orthogonalize_modes_vec_np` and `sort_by_mode_int_np` to utils; improve `check_modes_ortho` with automatic np.ndarray-to-torch.tensor casting
+- Enable `start_iter`, `step`, and `end_iter` for more flexible control of iter-wise constraints. This change is backward compatible. Original key of `freq` is still supported but is deprecated and will be removed in future
+- Improve reproducibility by adding `--seed` to CLI argument and `init_params.random_seed` to params file. Randomness includes object and position initialization, measurements Poisson noise, batches, and shuffling, etc. The seed is automatically set to 42 if not specified in multiGPU optimization, where we need exact same initialzation across devices.
+- Enable `start_iter` for torch.compile and multiGPU in response to issue #13 via manual recompilation; Add `end_iter` to `update_params` to further control grads for optimizable tensors
+### Changed
+- Change the appended digit of scan affines for clearer display. scale and asymmetry has been changed from `.2g` to `.2f`, while rotation and shear are changed from `.2g` to `.1f` so 3-digits angle like 179.5 degree can be displayed properly.
+- Improve `init_calibration` logging clarity by displaying the final RBF, Npix, and suggested probe_mask_k radius after meas_resample despite resampling won't change the ratio
+
 ## [0.1.0b10] - 2025-07-23
 ### Added
 - Add `compiler_configs` to `recon_params` to allow optional PyTorch JIT compilation for significant speedup (1.9x faster on PSO tested on A100 20gb MIG). Special thanks to @dy327 and @guanxing.li for helping me testing on macOS and Windows machines! Currently the `torch.compile` works for Windows, macOS, and Linux, although it has a bit more hardware/firmware requirements including:
