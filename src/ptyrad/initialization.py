@@ -1873,9 +1873,13 @@ class Initializer:
             objp = np.angle(obj)
             spatial_dims = obj[0].shape # (z,y,x)
             obja_mean = np.mean(obja, axis=0, keepdims=True)
-            obja_std = np.std(obja, axis=0, keepdims=True)
             objp_mean = np.mean(objp, axis=0, keepdims=True)
-            objp_std = np.std(objp, axis=0, keepdims=True)
+            if omode_now == 1: # There's no std when omode=1. This is rather rudimentary and we'll introduced some spatially structured noise in future release
+                obja_std = 5e-4 * obja_mean
+                objp_std = 0.20 * objp_mean
+            else:
+                obja_std = np.std(obja, axis=0, keepdims=True)
+                objp_std = np.std(objp, axis=0, keepdims=True)
             
             # Create new modes from random variable eps, note that amplitude and phase are perfectly correlated here
             set_random_seed(seed=self.random_seed)
